@@ -1,0 +1,51 @@
+name: Versioned Linux release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+  build-and-exercise:
+    needs: quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a version tag matching Cargo.toml
+        run: |
+          python3 -c 'import os,tomllib; assert os.environ["GITHUB_REF_NAME"] == "v"+tomllib.load(open("Cargo.toml","rb"))["package"]["version"]'
+      - name: Build exact source and package
+        run: |
+          scripts/build-linux-release.sh "$GITHUB_SHA" rust:1.99.1-bookworm@sha256:8bf7188ae46ad73b801c8d405eedc13ce63a7852b562885743a56890723549a8 linux/amd64 "$RUNNER_TEMP/build"
+          python3 scripts/package-linux-release.py "$GITHUB_SHA" "$RUNNER_TEMP/build" "$RUNNER_TEMP/assets"
+      - name: Exercise Debian 12 package install and removal
+        run: scripts/exercise-linux-package.sh debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 "$RUNNER_TEMP/assets"
+      - name: Exercise Ubuntu 26.04 package install and removal
+        run: scripts/exercise-linux-package.sh ubuntu:26.04@sha256:19fcd1bf268f02b60aca3bd30bd8a6d9a11759a430e32921833e65f16d87348a "$RUNNER_TEMP/assets"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: versioned-linux-amd64
+          path: ${{ runner.temp }}/assets/*
+          if-no-files-found: error
+  publish:
+    needs: build-and-exercise
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: versioned-linux-amd64
+          path: assets
+      - name: Publish only after all quality and install gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" assets/* --verify-tag --title "Ferriprint $GITHUB_REF_NAME" --notes 'Versioned Linux amd64 tar and Debian/Ubuntu package; matching embedded source, locked-dependency SPDX, build manifest and SHA-256 checksums. Native CUPS queue/driver remains required. No service auto-start, queue configuration or certification claim. See the compatibility and installation guides in the tagged source.'

@@ -1,0 +1,39 @@
+# Build output (Cargo.lock is committed: this is an application)
+/target/
+*.rs.bk
+
+# Operator configuration and credentials live outside version control.
+# Anchored to the repository root so tests/fixtures are never hidden.
+/config.toml
+/config.*.toml
+/*.local.toml
+/.env
+/tls/
+/secrets/
+/*.pem
+/*.key
+/*.p12
+/*.pfx
+
+# Runtime state: spooled documents, SQLite metadata and journals
+/state/
+/spool/
+/data/
+/var/
+/*.db
+/*.db-*
+/*.sqlite
+
+# Transient smoke-test and verification output
+/smoke/
+/tmp/
+/out/
+/artifacts/
+/*.log
+/*.tmp
+
+# Editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

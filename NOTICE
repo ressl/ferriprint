@@ -1,0 +1,37 @@
+# NOTICE
+
+Ferriprint
+Copyright (C) 2026 Robert Ressl
+
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU Affero General Public License as published by the Free Software Foundation,
+version 3 only ("AGPL-3.0-only"). The full license text is in the `LICENSE` file.
+
+Third-party components are listed with their licenses in `THIRD_PARTY_NOTICES.md`. The
+upstream projects studied during design (PAPPL, pappl-retrofit) are referenced there as
+design sources only and are not redistributed.
+
+Vendor printer drivers and PPD files (including Epson's) are installed separately on the
+operator's host under the vendor's own license terms; they are not bundled, modified, or
+redistributed with Ferriprint.
+
+## Rust standard library runtime attribution
+
+The distributed executable includes the Rust standard library. Its upstream
+library copyright/license document is reproduced verbatim from the digest-pinned
+Rust1.99.1 release compiler as `install/RUST-STDLIB-NOTICES.html` in project source
+and `RUST-STDLIB-NOTICES.html` alongside this NOTICE in installed documentation.
+It includes the upstream library component graph, including platform-specific
+components; it is not an assertion that all of those components are linked.
+
+Release metadata generation checks the document against the actual compiler's
+`share/doc/rust/COPYRIGHT-library.html`; the build manifest records its checksum.
+When changing the pinned release compiler, update this document verbatim from
+that compiler before building. The SPDX asset intentionally inventories the
+complete Cargo.lock registry graph, not compiler/standard-library or OS packages.
+
+The package's standard `copyright` file also contains the complete project and
+locked-crate license texts plus a plain-text rendering of all upstream Rust
+library notice text. This preserves licensing when an administrator's dpkg policy
+filters other documentation; the original HTML remains verbatim in the package,
+source and tar archives. Package scripts do not override that system policy.

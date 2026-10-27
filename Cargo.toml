@@ -1,0 +1,63 @@
+[package]
+name = "ferriprint"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-only"
+description = "A driverless IPP frontend for native CUPS printer queues, written in Rust"
+repository = "https://github.com/ressl/ferriprint"
+authors = ["Robert Ressl <rr@canus.ch>"]
+keywords = ["ipp", "printing", "airprint", "cups", "printer"]
+categories = ["network-programming", "command-line-utilities"]
+
+[dependencies]
+anyhow = "1"
+argon2 = "0.5"
+axum = "0.8"
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+flate2 = "1"
+fs2 = "0.4"
+futures-util = { version = "0.3", features = ["io"] }
+ipnet = { version = "2", features = ["serde"] }
+ipp = { version = "8.0", default-features = false, features = ["async"] }
+libc = "0.2"
+parking_lot = "0.12"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "stream"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+rpassword = "7"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+subtle = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "signal", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["compat", "io"] }
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = { version = "2", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+zeroize = "1"
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[build-dependencies]
+flate2 = "1"
+tar = "0.4"
+
+[dev-dependencies]
+rcgen = "0.13"
+tempfile = "3"
+tar = "0.4"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"

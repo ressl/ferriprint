@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, public-development]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.99.1-bookworm@sha256:8bf7188ae46ad73b801c8d405eedc13ce63a7852b562885743a56890723549a8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install pinned toolchain components
+        run: |
+          rustup component add rustfmt clippy
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y --no-install-recommends python3-jsonschema
+      - name: Format and strict lint
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Behavioral and security tests
+        run: cargo test --locked --all-targets --all-features
+      - name: Dependency inventory and notice proof
+        run: |
+          cargo metadata --locked --format-version 1 > /tmp/metadata.json
+          python3 scripts/release-metadata.py --metadata /tmp/metadata.json --commit "$GITHUB_SHA" --source-date-epoch "$(git show -s --format=%ct "$GITHUB_SHA")" --notices THIRD_PARTY_NOTICES.md --check-notices --sbom /tmp/ferriprint.spdx.json
+          python3 scripts/verify-release-metadata.py "$GITHUB_SHA" /tmp/ferriprint.spdx.json
+      - name: Script syntax and exact embedded source proof
+        run: |
+          python3 -m py_compile scripts/*.py
+          for script in scripts/*.sh; do bash -n "$script"; done
+          cargo build --locked --release --bin ferriprint
+          python3 scripts/extract-source.py target/release/ferriprint /tmp/ferriprint-source.tar.gz
+          python3 scripts/verify-source.py "$GITHUB_SHA" /tmp/ferriprint-source.tar.gz
+  msrv:
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build library and executable with the declared minimum Rust
+        run: cargo build --locked --all-features --lib --bin ferriprint
+  secret-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan reachable history without exposing findings
+        run: |
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --mount "type=bind,src=$PWD,dst=/repo,readonly" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f detect --source /repo --redact --no-banner

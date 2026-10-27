@@ -1,0 +1,100 @@
+.\" SPDX-License-Identifier: AGPL-3.0-only
+.\" Copyright (C) 2026 Robert Ressl
+.TH FERRIPRINT 1 "October 2026" "Ferriprint" "User Commands"
+.SH NAME
+ferriprint \- secure driverless IPP frontend for an existing native CUPS queue
+.SH SYNOPSIS
+.B ferriprint
+.RB [ --config " PATH"]
+.RI [ COMMAND ]
+.SH DESCRIPTION
+Ferriprint validates standard IPP media, margins, quality, tray, color and sides
+against an operator-supplied private PPD and one managed profile per printer.
+It forwards documents and resolved native options to an existing CUPS queue.
+It does not rasterize documents, install vendor drivers, configure CUPS queues
+or certify physical output.
+.SH CONFIGURATION
+The default bootstrap file is ferriprint.toml in the current directory.
+The packaged service reads /etc/ferriprint/ferriprint.toml.
+Static printer identity, PPD and upstream paths belong in that file.
+Editable mapping/default data belongs only in
+.I state_dir/profiles/NAME.toml
+and is validated against the PPD. See the installed TOML examples and setup guide.
+.SH COMMANDS
+.TP
+.B check
+Validate bootstrap configuration, private PPD and managed profiles offline.
+No printer is contacted and no job is submitted.
+.TP
+.B serve
+Start the frontend, probe upstream formats and reconcile durable jobs.
+This is the default command when no subcommand is given.
+.TP
+.B setup
+Create reviewed bootstrap configuration and a managed profile from an existing
+CUPS queue and an operator-provided PPD. Consult
+.B ferriprint setup --help
+for required paths and mapping choices. This does not configure CUPS or print.
+.TP
+.B user password-hash
+Generate an Argon2id password hash from protected standard input or a terminal.
+Consult command help for the output file option. Never pass plaintext credentials
+in command-line arguments or store them in public configuration.
+.TP
+.B abandon
+Offline escape hatch for a job with unknown upstream submission outcome.
+Requires explicit acknowledgement; the real upstream job may still print.
+It releases local admission capacity but retains the audit record.
+.SH SECURITY
+Non-loopback listeners require TLS and explicit client networks.
+Discovery visibility never grants access and TLS verification is not disabled.
+The configured canonical FQDN must match its certificate.
+Authenticated users own their jobs. An IPP requesting-user-name is not a credential.
+Explicit anonymous trusted-LAN admission is a shared principal, not per-user isolation.
+Administration always requires an authenticated admin role, including when anonymous
+IPP printing is enabled. State-changing browser actions require a same-origin
+CSRF-protected request.
+.PP
+Within the existing network/TLS boundary, unauthenticated capability
+Get-Printer-Attributes and the corresponding-source offer are permitted.
+All job operations, including Validate-Job, and web/job APIs still require a
+verified user or an explicitly admitted shared anonymous source.
+Invalid supplied credentials always fail, even on those read-only exceptions.
+Printer authentication attributes reflect the request source so an existing
+anonymous client is not silently forced to authenticate.
+.PP
+Private keys, password hashes, vendor PPDs and durable job state remain outside
+public source/package archives. The service obtains TLS keys through systemd
+LoadCredential from operator-managed root-only paths. Never broaden ACME key permissions.
+.PP
+Password hashes must be regular, non-symlink files effectively private to root
+and the service UID. Keep originals root0600. A Linux systemd runtime file may
+be root0440 with a named service-UID read ACL and no effective group/other access;
+the ACL mask is not itself a group grant. No credential-path exemption is used.
+.SH FILES
+.TP
+.I /etc/ferriprint/ferriprint.toml
+Operator-managed static bootstrap configuration; not supplied as an active conffile.
+.TP
+.I /var/lib/ferriprint
+Private durable jobs, spool and managed profiles; retain across upgrades/removal.
+.TP
+.I /usr/share/doc/ferriprint
+Examples, setup/security/deployment guides, license notices and build metadata.
+.SH INSTALLATION
+The package does not enable, start or restart the service, import credentials, create a
+queue or submit a print. Configure and check first, then explicitly start the
+service after reviewing TLS, network admission, ownership and existing jobs.
+Package removal refuses to stop an active frontend automatically: gracefully stop
+it after checking jobs. Configuration, state and the service account are retained.
+.SH SOURCE
+The running service exposes the matching AGPL project source archive at /source.
+Dependencies are fetched from the committed Cargo.lock; it is not a vendored
+or offline dependency source bundle. Release assets include source, SPDX inventory,
+checksums and a pinned-input build manifest, not a byte-reproducibility claim.
+.SH SEE ALSO
+.BR ipptool (1),
+.BR lpstat (1),
+.BR systemd.exec (5)
+.SH LICENSE
+GNU Affero General Public License, version 3 only.

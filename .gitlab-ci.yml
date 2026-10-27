@@ -1,0 +1,107 @@
+# Ferriprint CI: formatting, linting, tests, MSRV check, dependency audit and
+# secret scan. Self-contained; no internal endpoints or credentials are
+# referenced. Public releases are gated additionally by the GitHub package
+# install/remove and versioned-publication workflow.
+
+stages:
+  - validate
+  - test
+  - scan
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+default:
+  interruptible: true
+
+variables:
+  RUST_IMAGE: rust:1.99.1-bookworm@sha256:8bf7188ae46ad73b801c8d405eedc13ce63a7852b562885743a56890723549a8
+  MSRV_IMAGE: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+  GITLEAKS_VERSION: v8.30.1
+
+.default_retry:
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+
+.rust_base:
+  image: "$RUST_IMAGE"
+  extends: .default_retry
+  before_script:
+    - rustup component add rustfmt clippy
+
+rust:fmt:
+  stage: validate
+  extends: .rust_base
+  script:
+    - cargo fmt --all -- --check
+
+# Enforce the minimum supported Rust version declared in Cargo.toml.
+rust:msrv:
+  stage: validate
+  image: "$MSRV_IMAGE"
+  extends: .default_retry
+  script:
+    - cargo build --locked --all-features --lib --bin ferriprint
+
+rust:clippy:
+  stage: test
+  extends: .rust_base
+  script:
+    - cargo clippy --locked --all-targets --all-features -- -D warnings
+
+rust:test:
+  stage: test
+  extends: .rust_base
+  script:
+    - cargo test --locked --all-targets --all-features
+    - cargo metadata --locked --format-version 1 > /tmp/metadata.json
+    - python3 scripts/release-metadata.py --metadata /tmp/metadata.json --commit "$CI_COMMIT_SHA" --source-date-epoch "$(git show -s --format=%ct "$CI_COMMIT_SHA")" --notices THIRD_PARTY_NOTICES.md --check-notices --sbom /tmp/ferriprint.spdx.json
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y --no-install-recommends python3-jsonschema
+    - python3 scripts/verify-release-metadata.py "$CI_COMMIT_SHA" /tmp/ferriprint.spdx.json
+    - python3 -m py_compile scripts/*.py
+    - for script in scripts/*.sh; do bash -n "$script"; done
+    - cargo build --locked --release --bin ferriprint
+    - python3 scripts/extract-source.py target/release/ferriprint /tmp/ferriprint-source.tar.gz
+    - python3 scripts/verify-source.py "$CI_COMMIT_SHA" /tmp/ferriprint-source.tar.gz
+
+rust:audit:
+  stage: scan
+  extends: .rust_base
+  # Cache the compiled cargo-audit binary so it is not rebuilt from source on
+  # every pipeline run.
+  cache:
+    key: cargo-security-tools
+    paths:
+      - .cargo-tools/bin/
+  variables:
+    CARGO_INSTALL_ROOT: $CI_PROJECT_DIR/.cargo-tools
+  before_script:
+    - rustup component add rustfmt clippy
+    - export PATH="$CI_PROJECT_DIR/.cargo-tools/bin:$PATH"
+  script:
+    - command -v cargo-audit || cargo install cargo-audit --locked
+    - cargo audit
+
+# Secret scanning over the full history; gitleaks' built-in default rules are
+# used (this repository has no custom policy file). GIT_DEPTH: 0 fetches the
+# whole history so every commit is scanned, not just the tip.
+secret-scan:gitleaks:
+  stage: scan
+  image:
+    name: "zricethezav/gitleaks:$GITLEAKS_VERSION"
+    entrypoint: [""]
+  extends: .default_retry
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - gitleaks detect --source . --redact --verbose

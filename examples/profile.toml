@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Robert Ressl
+# Synthetic native PPD mappings, NOT a real hardware driver or guessed presets.
+schema_version = 1
+document_formats = ["application/pdf", "image/jpeg", "image/png", "image/pwg-raster", "image/urf"]
+resolutions = [{ x = 300, y = 300 }]
+# Operator declaration only; never advertised as a fresh physical sensor reading.
+declared_ready = [{ media = "iso_a4_210x297mm", source = "main", media_type = "stationery" }]
+
+[sources]
+main = "Rear"
+tray-1 = "Cassette"
+
+[media_types.stationery]
+draft = { MediaType = "Plain", Quality = "Economy" }
+normal = { MediaType = "Plain", Quality = "Standard" }
+high = { MediaType = "Plain", Quality = "Fine" }
+
+[media_types.photographic-glossy]
+normal = { MediaType = "Photo", Quality = "Standard" }
+high = { MediaType = "Photo", Quality = "Fine" }
+
+[color_modes]
+color = { ColorModel = "RGB" }
+monochrome = { ColorModel = "Gray" }
+
+[sides]
+one-sided = { Duplex = "None" }
+two-sided-long-edge = { Duplex = "DuplexNoTumble" }
+two-sided-short-edge = { Duplex = "DuplexTumble" }
+
+[defaults]
+media = "iso_a4_210x297mm"
+borderless = false
+source = "main"
+media_type = "stationery"
+quality = 4
+color_mode = "color"
+sides = "one-sided"
