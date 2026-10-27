@@ -51,6 +51,37 @@ compiler; when changing that compiler, update the notice from that exact image,
 not an unrelated current web version. No proprietary driver/PPD is substituted
 for these open-source runtime notices.
 
+## Observed release 0.2.0
+
+- [Immutable release and downloads](https://github.com/ressl/ferriprint/releases/tag/v0.2.0).
+- [Actual successful gated publisher](https://github.com/ressl/ferriprint/actions/runs/40594946394).
+- Source/tag commit `24ccd15668502e24854cdaea87b4500c8e767554`, tree
+  `f5d4d648e1d35d58e5e4817812b1528fc08278e9`.
+- Actual downloaded tar ELF SHA256:
+  `0d49ea440e1734f2e1a27fc6435c9495fae07ee7a2f2c20f5b6308648cd7c279`.
+- Actual released source was extracted from that ELF: all56 tracked members
+  matched the tagged commit byte-for-byte, and the archive equaled the separately
+  downloaded source asset. The deployed `/source` matched the same archive.
+
+| Actual downloaded asset | SHA256 |
+| --- | --- |
+| `ferriprint-0.2.0-build-manifest.txt` | `2b15755cfb69387b9f0c097d47c9576ab8809b83af7a182f0fe553bc406bf3d9` |
+| `ferriprint-0.2.0-linux-amd64.tar.gz` | `74068492c040765708f64fce61cb8b5889f1a2820bb8a218d099600d73e6d0ab` |
+| `ferriprint-0.2.0-source.tar.gz` | `f0fd4336a3860d168f7b2e2f89fb5a2d625deecca83dc8bd611aa3518c9f6779` |
+| `ferriprint-0.2.0.spdx.json` | `645174cbadd381425368fa18d1717f79801a237cfcd39add45b6f95c49cfa3ab` |
+| `ferriprint_0.2.0-1_amd64.deb` | `33ffe6e167860e6c343a5e859e700f6d329a81d6e34ef476190e75d2301827d4` |
+| `SHA256SUMS` | `b57fb8f7c739c8b311381a1fd7ee2261292a0698526417f7f309da8eb2d0af2f` |
+
+Every downloaded asset also matched GitHub's uploaded digest. `SHA256SUMS`
+contains the five other files, not itself. The manifest records actual
+Rust1.99.1/compiler-matched library notices and complete281-package locked SPDX;
+Debian12 and Ubuntu26.04.1 installation/removal plus the documented tar path
+passed in the publishing workflow. Package/manifest bytes differed from local
+pre-release builds; no whole-build byte-reproducibility assertion is made.
+Later documentation-only commits may add observations, but never retag0.2.0,
+replace its assets or relabel the matching running source as a newer commit.
+
+
 ## Debian/Ubuntu package
 
 ```sh
@@ -190,11 +221,11 @@ full notices, man and examples rather than assuming dpkg installed filtered docs
 
 Public source and contributions use
 <https://github.com/ressl/ferriprint>; the existing GitLab project remains private
-and retains its historical branches. The first public release uses a reviewed
-sanitized **new root commit**, not a rewritten private history. The
-`public-development` branch and release tags identify the same clean commit on
-both remotes; future public work continues from this branch without merging old
-private parents.
+and retains its historical branches. The public lineage starts at a reviewed
+sanitized **new root commit**, not a rewritten private history. The first release
+uses an ordinary clean public descendant that corrected the observed container
+checkout-ownership CI boundary. `public-development` and immutable version tags
+are mirrored on both remotes; future work never merges old private parents.
 
 The export tree must be byte-identical to the reviewed final private tree. Its
 **public** commit is the build/source/tag input; the private predecessor and shared

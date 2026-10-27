@@ -4,7 +4,7 @@ All notable changes to Ferriprint are documented in this file. The format follow
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-27
 
 ### Changed
 

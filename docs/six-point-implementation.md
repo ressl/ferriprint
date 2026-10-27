@@ -249,26 +249,30 @@ claim.
 
 ### Security and acceptance
 
-- [ ] Public tree and reachable-history review finds no unreconciled credential,
+- [x] Public tree and reachable-history review finds no unreconciled credential,
       proprietary PPD/driver, private key, operator artifact or license blocker.
-- [ ] Public GitHub repository, immutable version tag/release and downloadable assets
+- [x] Public GitHub repository, immutable version tag/release and downloadable assets
       are observed; canonical GitLab source and visibility are preserved.
-- [ ] Final build manifest names exact commit/toolchain/image; binary embedded
+- [x] Final build manifest names exact commit/toolchain/image; binary embedded
       `/source` members match that commit exactly, with no extra/missing members.
 - [x] amd64 tar installation and Debian/Ubuntu package install/remove are exercised
       in disposable Linux environments, with service not auto-enabled/started and
       no native CUPS or printer configuration touched.
-- [ ] CI runs meaningful formatting, strict lint, tests, source/package/provenance
+- [x] CI runs meaningful formatting, strict lint, tests, source/package/provenance
       checks and release publication gates; SBOM/notices cover actual locked deps.
 - [x] Compatibility matrix distinguishes built/tested OS/architecture, discovery,
       authenticated clients, real printer metadata and unsupported combinations.
 
-Evidence: pre-release amd64 builds,56-member exact embedded/source-offer proof,
-actual compiler-matched Rust notices, complete281-package SPDX/schema/lock proof,
-Debian12/Ubuntu26.04.1 install/reconfigure/remove/purge and documented tar
-installation/service-user checks passed. Public clean-root/tag/downloaded-asset
-and actual CI publication observations remain open until performed, not inferred
-from private QA outputs.
+Evidence: the clean public lineage and immutable
+[v0.2.0 release](https://github.com/ressl/ferriprint/releases/tag/v0.2.0) are
+published on GitHub and mirrored to the still-private canonical GitLab project.
+The [actual gated publisher](https://github.com/ressl/ferriprint/actions/runs/40594946394)
+passed55 tests, strict quality checks,56-member exact source proof, compiler-matched
+Rust notices,281-package SPDX/schema/lock validation and both disposable package/
+tar exercises. All six actual downloaded assets matched GitHub's uploaded digests;
+the five explicit checksum entries exclude the checksum file itself. Extracted
+released ELF source matched every tracked blob of the immutable public commit.
+Exact checksums and remaining platform limits are in the installation/matrix docs.
 
 ## Integration, migration and rollback gates
 
@@ -397,4 +401,47 @@ the private operator record separately holds deployment/state-preservation proof
 | 4. Web administration and cancel | Actual browser owner filtering, user management403, CSRF/cross-owner403, active-job save409, native form Validate/Save and actual upstream terminal cancellation. Cold credential rotation rejected old/accepted new credentials; rollback reversed that while preserving job/sequence/origin and exactly one receiver receipt | No mocked Origin/referrer behavior or fabricated cancellation; direct native-CUPS access is outside frontend isolation. All native authentication used an isolated receiver, with no saved credentials or physical print |
 | 5. Status source/freshness | Verified native IPPS source returned real ink markers and queue-ready metadata; actual browser showed source/fetch age/raw marker-change information and unknown physical trays; stopped isolated source became visibly stale/unavailable while preserving the last observation | Native cached metadata is not sensor-confirmed loaded paper or a measured physical-supply timestamp; negative/unavailable readings are not zero |
 | 6. Distribution and provenance | Native Linux fmt/strict all-target/all-feature clippy and 55 tests; actual pinned Rust 1.88.0 library+executable check/build; all-member embedded-source proof; complete 281-package locked inventory/notices plus official SPDX2.3 schema/checksum/purl validation; real Debian12/Ubuntu26.04.1 `.deb` install/reconfigure/remove/purge and documented tar install/service-user check | Disposable containers preserve state/account/config and CUPS sentinel; not booted systemd tests. Public clean-root publication, downloaded released-asset proof and frontend-only production cutover are separately gated, not inferred from local QA assets |
+
+### Released and deployed nonprinting acceptance (2026-10-27 UTC)
+
+All six numbered acceptance checklists above are now exercised, not merely plans.
+The immutable release/source commit is
+`24ccd15668502e24854cdaea87b4500c8e767554`; later documentation observations are
+ordinary clean public descendants, never a replacement tag or rebuilt asset.
+
+- [x] Actual published binary, manifest and source were downloaded and verified;
+      the running executable matched the published ELF and its `/source` matched
+      all56 tracked members of the tagged commit.
+- [x] Explicitly approved client admission and anonymous CIDRs were applied
+      independently in app and the owned network guard, with two separately
+      provisioned private user/admin credentials delivered through LoadCredential.
+- [x] Existing static identity, durable records/IDs/sequence/time origin, empty
+      spool, native queue/PPD/defaults and TLS permissions were preserved across
+      immediate before/after-stop gates. No production job was created or printed.
+- [x] Old external Python unit/helper were removed; actual Rust Avahi publication
+      retained service name/UUID/FQDN/port/resource path. Native macOS resolved it
+      afresh, preserved the raw terminal DNS dot and passed system trust,
+      Get-Printer-Attributes and A3 zero-margin/high-quality Validate-Job.
+- [x] All34 captured frontend semantic/default/capability fields matched the prior
+      frontend; the Mac's three queues, both default scopes and preferences stayed
+      unchanged. This is one physical Mac, not a claim of two physical clients.
+- [x] Real provisioned personal credentials passed Get/Validate; personal jobs
+      excluded historical anonymous jobs, foreign-job reads and management
+      returned403, administrator access succeeded, and anonymous management
+      elicited401 Basic challenge. Bad supplied credentials never became anonymous.
+- [x] Actual authenticated Chromium rendered the existing profile's six structured
+      defaults and Validate/Save controls without submitting changes. A separate
+      browser context rendered the verified personal principal and actual source/
+      fetch-age/unknown-physical-freshness/ink status, without modifying jobs.
+
+Two operational observations are deliberately not hidden. An initial private
+`Type=simple` startup identity sample aborted and safely restored the prior
+frontend; its exact sampled executable was not retained, so a pre-exec race is an
+inference. The private `Type=exec` correction retained the exact published-SHA
+guard and produced an observed matching executable before readiness checks.
+Separately, an existing scheduled native-CUPS logrotate job restarted CUPS during
+the cutover window. Its timer/journal/postrotate action were recorded privately;
+native configuration/PPD/defaults/TLS and job state were unchanged. Avahi, Docker
+and containerd invocations stayed unchanged; **not every CUPS invocation did**.
+No timer/logrotate/native service policy was altered to conceal that exception.
 

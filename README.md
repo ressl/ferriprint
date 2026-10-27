@@ -39,11 +39,19 @@ acceptance checklist and migration/rollback gates:
    exact embedded AGPL source, pinned-input builds, Linux amd64 tar/Debian package,
    locked-dependency SPDX/notices and disposable installation/removal gates.
 
-The [compatibility matrix](docs/compatibility.md) distinguishes actual observations
-from pending release gates and unsupported combinations. Tests alone are not
-hardware, browser, discovery or package-installation proof.
+The [compatibility matrix](docs/compatibility.md) records actual observations and
+unsupported combinations. Tests alone are not hardware, browser, discovery or
+package-installation proof.
 
 ## Installation
+
+**Released:** [Ferriprint0.2.0](https://github.com/ressl/ferriprint/releases/tag/v0.2.0).
+Its immutable source is commit `24ccd15668502e24854cdaea87b4500c8e767554`;
+the release workflow exercised Linux quality/source checks and both Debian12 and
+Ubuntu26.04.1 package/tar installations before publishing. Downloaded release
+bytes, the embedded source and a controlled nonprinting deployment were verified.
+See the [exact release evidence](docs/release-and-installation.md#observed-release-020).
+Later documentation commits do not relabel that tag or the running source offer.
 
 See [versioned installation and provenance](docs/release-and-installation.md) for
 release assets, checksums, tar/`.deb`, strict systemd unit, manual and examples.
