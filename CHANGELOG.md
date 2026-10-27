@@ -32,6 +32,9 @@ All notable changes to Ferriprint are documented in this file. The format follow
   explicitly overrides ExecStart in its private host-owned drop-in.
   Optional Avahi/D-Bus dependencies are ordering-only: installing the package does
   not activate or restart global discovery daemons.
+- Container CI explicitly trusts only its owned checkout path for Git-based source
+  and dependency proofs, independent of the hosted runner's UID and HOME behavior;
+  it does not trust arbitrary directories or change a persistent host's Git config.
 
 ### Added
 

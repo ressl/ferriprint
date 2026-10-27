@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Trust only this container's owned checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install pinned toolchain components
         run: |
           rustup component add rustfmt clippy
@@ -50,6 +52,8 @@ jobs:
       image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
     steps:
       - uses: actions/checkout@v4
+      - name: Trust only this container's owned checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build library and executable with the declared minimum Rust
         run: cargo build --locked --all-features --lib --bin ferriprint
   secret-scan:
