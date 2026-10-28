@@ -12,7 +12,7 @@ release and controlled nonprinting rollout; unsupported targets remain explicit.
 | Linux amd64, glibc | Published0.2.0 tar/`.deb`; native build, fmt, strict all-target/all-feature clippy and55 tests passed in the actual release workflow | Real Avahi0.8 D-Bus collision, restart/re-registration and withdrawal exercised separately; actual released deployment observed by native macOS | Rust1.99.1 release compiler and actual Rust1.88.0 library/executable builds passed; no whole-build byte-reproducibility claim |
 | Debian12 amd64 | Disposable `.deb` install/reconfigure/remove/purge and documented tar install/service-user offline check passed | Real Avahi 0.8/private D-Bus lifecycle exercised separately | Retained state/account/config and unchanged container CUPS sentinel verified; not a booted systemd test |
 | Ubuntu26.04.1 amd64 | Disposable package/tar exercises passed; actual downloaded release deployed through the reviewed unit/private host override | Rust publisher retained the prior service identity/FQDN and passed fresh native macOS resolve/Get/Validate | Static identity/state/native config/PPD/defaults/TLS preserved; approved client/auth policy changed deliberately. A concurrent scheduled CUPS logrotate restart is recorded below, not called an unchanged invocation |
-| Linux arm64 | No published package unless actually built/exercised | Not claimed | Source portability is not an exercised binary release |
+| Linux arm64 | Unreleased0.3 native AArch64 ELF and both Debian/Ubuntu package/tar runtime gates exercised; no published ARM64 release yet | No additional discovery-server result inferred from packaging | Actual architecture/execution and installed-runtime evidence below; not cross-compilation or hardware-client certification |
 | macOS as server | Not supported/tested for this release | No macOS server Bonjour backend claim | Native macOS is a client verification target only |
 | Windows/BSD as server | Not supported/tested | Not claimed | No packages or operational guarantees |
 
@@ -71,15 +71,65 @@ invocations and native configuration/PPD/defaults/TLS stayed unchanged.
 
 ## 0.3 development evidence boundaries
 
-The five-point contract and new architecture-aware tooling are not a published
-ARM64 release or an exercised0.3 feature result by themselves. Current actual
-environment research established native Linux AArch64 Docker on Apple Silicon
-(18 CPUs,16.8GB VM memory), with the immutable Rust1.99.1 arm64 image executing
-`aarch64`/`arm64`, rustc host `aarch64-unknown-linux-gnu` and glibc2.36.
-Its verbatim Rust library notice digest matched the supplied source notice.
-Native amd64 Docker on Ubuntu26.04.1 was independently reachable. Final0.3 ELF,
-package/tar/service-user receiver and source/SPDX gates still require an integrated
-exact0.3 source build; no old0.2 result is relabeled here.
+Unreleased0.3 candidate `fe2611a421241ea3501ee84a2537a95e04619dc1`
+was actually built and exercised on two independent native Docker engines:
+Linux AArch64 on Apple Silicon and Linux x86_64 on Ubuntu26.04.1. Their pinned
+Rust1.99.1 images reported matching native daemon/kernel/rustc hosts; the actual
+ELFs were AArch64 machine183 and x86_64 machine62 and executed as version0.3.0.
+This is not an old0.2 result relabeled or a published0.3 release.
+
+| Native architecture | Debian12 | Ubuntu26.04.1 | Actual runtime boundary |
+|---|---|---|---|
+| amd64 / x86_64 | `.deb` lifecycle and documented tar installation passed | `.deb` lifecycle and documented tar installation passed | Each installed executable, dedicated nonroot UID100 and independent private state |
+| arm64 / AArch64 | `.deb` lifecycle and documented tar installation passed | `.deb` lifecycle and documented tar installation passed | Each installed executable, dedicated nonroot UID100 and independent private state |
+
+All eight installed-runtime runs used genuine0.3 initialization/catalog/setup,
+offline checks, GPA/Validate/PDF submission, upstream700 Get/Cancel, durable
+restart without duplicate submission, served-source equality and an exact
+one-document graceful receiver ledger. Package install/reconfiguration/removal/
+purge preserved the account/private state/operator sentinels and container CUPS
+configuration, without automatic enable/start/restart. These were disposable
+containers, not booted-systemd or physical-output tests.
+
+Both candidate executables embedded the same72-member source archive
+(`fc81304fd2ca9f94ece8a08f03d436c36f3b9cc3de419f0a433273f7d2b4bb53`).
+The actual merger accepted byte-identical common source/281-package SPDX and
+produced one eight-asset checksum set. Each architecture retained its own ELF,
+tar, Debian package and native build manifest. The explicitly ignored Linux
+root migration ownership regression was separately invoked as UID0 on each
+native architecture: one passed, zero ignored per invocation, including actual
+UID994 read-success/write-denial for the root-owned protected output.
+
+Real native Debian CUPS2.4.2/cups-filters1.28.17 also applied all eight options
+from the actual complete A3 recipe export through `lp` and its real IPP backend.
+The nonprinting receiver observed TA3/Fine/Rear/Photo/RGB/None, copies2 and
+300x300dpi. Native CUPS applied orientation/fit inside the PDF and normalized
+their final ticket fields; the measured PDF geometry/matrices and preserved
+source marker are recorded in [nonprinting acceptance](nonprinting-acceptance.md#observed03-native-cups-recipe-application).
+This proves native software application, not print-dialog visibility, additional
+hardware, measured margins/quality or physical paper output. A later artifact's
+own manifest/source identifies its exact successor revision; this candidate is
+not silently relabeled.
+
+On that candidate, one actual macOS native-library application used all eight
+saved recipe-export options through `cupsParseOptions`/`cupsEncodeOptions2`,
+Validate0 and one `cupsDoFileRequest` Print0. A normal user created through the
+real browser, granted only the isolated printer, authenticated with system TLS
+trust and the native root-dot URI; no admin/anonymous print bypass was used.
+The receiver observed TA3/Fine/Rear/Photo/RGB/None, copies2,orientation4,
+300x300dpi,scaling`fit` and632 PDF bytes; frontend media was29700x42000 with
+four zero margins and that user's ownership. The normal user's real browser
+Cancel reconciled frontend/receiver to7 with one ledger entry. Existing three
+queue URIs, both defaults, preference bytes and Keychain save state were not
+changed. This was actual native-library application, not a local queue install
+or a native print-dialog test.
+
+On the already observed real Mac, the0.3 native print-dialog installation/preset
+visibility gate remained **unverified / externally blocked**: the authorized
+session was screen-locked and accessibility reported no usable windows.
+Native-library/metadata success is not a GUI test. This is a session-access
+prerequisite, not a claim that macOS is unsupported; no unlock or permission
+bypass was attempted.
 
 | Additional requested target | Actual inventory/access evidence | Remaining acceptance prerequisite |
 |---|---|---|

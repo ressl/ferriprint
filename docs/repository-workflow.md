@@ -75,6 +75,22 @@ The version-tag workflow calls the quality workflow and is the **single** GitHub
 release publisher after source/build/package gates. Do not race it with a manual
 `gh release create` or a second tag-triggered quality/publisher job.
 
+The private GitLab destination receives both the same reviewed source branch/tag
+and the actual released packages. Push only the approved `public-development`
+ref and the same version-tag object to the intended remotes; never push all refs,
+import private parents or change project visibility.
+
+After the sole GitHub publisher succeeds, download **all nine actual assets**
+into an empty private directory. Verify the single eight-entry `SHA256SUMS`,
+both manifests/ELFs and embedded source against the approved commit. Mirror those
+exact downloaded files, including `SHA256SUMS`, into the existing private GitLab
+generic registry under `ferriprint/VERSION/FILENAME`, then create the GitLab
+release on the already-pushed same tag with links to those private objects.
+Use existing protected API authentication, not token argv/logs or a new publisher.
+Download the private copies and require byte-identical files/checksums before
+calling the mirror complete. Do not rebuild, relabel, overwrite a mismatching
+existing asset or replace the GitHub workflow with manual release creation.
+
 Before deployment, download the **actually published** assets and verify
 SHA256SUMS, manifest/source identity and the binary extracted from the versioned
 tar. Install that binary, then compare the running `/proc/PID/exe` checksum and

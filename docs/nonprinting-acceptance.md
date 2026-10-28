@@ -167,3 +167,47 @@ genuine0.3 init/setup/check/serve, receiver GPA/Validate/Print/known-ID cancella
 restart, served-source equality and exact one-job ledger. QA receiver binaries
 stay outside release assets. These gates do not substitute for the real0.3
 browser flows above or claim additional physical clients/printers.
+
+## Observed0.3 native CUPS recipe application
+
+The unreleased `fe2611a421241ea3501ee84a2537a95e04619dc1` candidate was
+exercised in a disposable native Linux amd64 Debian12 container with real
+CUPS2.4.2-3+deb12u9 and cups-filters1.28.17-3+deb12u2. No host CUPS socket,
+physical backend, published port or host queue was involved. The native daemon,
+frontend and existing Rust receiver listened only on literal loopback addresses.
+Explicit anonymous admission and the sole managed printer grant were confined
+to that disposable loopback options fixture, not a public/authenticated QA policy.
+Administrator credentials remained in protected memory/stdin/HTTP headers, never
+URIs, argv, plaintext files or CUPS spool credentials.
+
+After genuine0.3 init/setup, the authorized recipe API exported the complete
+A3-borderless-high recipe. Its eight actual `cups_options` pairs were passed
+unchanged as `lp -o` arguments to a real `lpadmin -m everywhere` CUPS queue; no
+synthetic IPP Print payload or expected-map echo stood in for native application.
+Actual CUPS queue inventory/inspection and HTTP PPD export also succeeded.
+One native job reached frontend1/upstream700. The Rust receiver independently
+observed `PageSize=TA3`, `Quality=Fine`, `InputSlot=Rear`, `MediaType=Photo`,
+`ColorModel=RGB`, `Duplex=None`, copies2,300x300dpi and1106 actual PDF bytes.
+
+Do **not** report raw ticket equality: CUPS normalized exported orientation4
+to3 and scaling`fit` to`none` after its real PDF filter processed them:
+
+- The source was one A4 page, `MediaBox=[0,0,595,842]`, rotation0,616 bytes,
+  SHA256 `e4116626cdda1c1713cf65ab2b706fd35bf2deb5e953b531255403e98d088c09`.
+- The actual incoming frontend spool PDF, whose1106 bytes matched the receiver's
+  document count, had SHA256
+  `d344f233f109e568225e5763ab321f2050c9cfaa2f3602d69d681817d9b50efe`.
+  `pdfinfo`/`qpdf` showed landscape A3
+  `MediaBox=[0,0,1190.551147,841.889771]`, page`Rotate=270`, and the source
+  form's90-degree rotation matrix `[0,-1,1,0,0,595]`.
+- Its content matrix `[1.413956,0,0,1.413956,0,0.292877]` applies the actual
+  rotated-page fit: `min(1190.551147/842,841.889771/595)=1.4139562316`.
+  Independent `pdftotext -bbox` text-width growth was1.413956; the original
+  `Ferriprint NONPRINTING package acceptance` marker/content stream survived
+  exactly. Nonempty bytes alone were not counted as orientation/scaling proof.
+
+One explicit frontend Cancel reconciled to receiver state7; graceful SIGINT
+produced exactly one received-document ledger entry. The owned local CUPS job
+was then canceled for cleanup. These are observed software transformations and
+nonprinting delivery, not a physical orientation/edge/color/quality measurement,
+a native GUI/preset-visibility result or a second real printer/model.

@@ -6,9 +6,10 @@ All notable changes to Ferriprint are documented in this file. The format follow
 
 ## [Unreleased]
 
-This0.3 development cutover is not a new publication or an assertion that pending
-browser/native/package/hardware gates have passed. The immutable0.2.0 release is
-unchanged.
+This unreleased0.3 development cutover is not a new publication or a hardware
+certification claim. Actual native package/tar/runtime and CUPS recipe-application
+evidence is recorded in the compatibility/nonprinting guides; unexercised client
+UI/hardware targets remain explicit. The immutable0.2.0 release is unchanged.
 
 ### Changed
 
@@ -54,6 +55,16 @@ unchanged.
   physical-quality prerequisites separately from software implementation; online
   registration, simulator fixtures and multiple queues for one device are not
   native hardware coverage.
+- Record actual Debian12/Ubuntu26.04.1 `.deb` lifecycle and documented nonroot tar
+  runtime passes on independent native amd64/AArch64 engines, exact common-source/
+  SPDX merge, and separately invoked Linux root migration ownership regressions.
+- Record real CUPS `lp` application of the full exported A3 recipe, receiver native
+  choices/copies/resolution/document, and measured PDF rotation/fit matrices
+  instead of falsely claiming unchanged orientation/scaling ticket fields.
+- Record one authenticated normal-user macOS native-library application of the
+  saved full recipe export, actual receiver ticket/document and browser cancel,
+  without queue/default/preference/Keychain changes; keep the screen-locked
+  native print-dialog/preset-visibility gate explicitly unverified.
 
 ## [0.2.0] - 2026-10-27
 
