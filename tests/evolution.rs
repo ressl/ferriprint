@@ -549,7 +549,15 @@ async fn profile_validation_gate_durable_apply_and_immutable_job_snapshots() {
             .quality,
         4
     );
-    front.app.engine.cancel_job(held, "alice").await.unwrap();
+    front
+        .app
+        .engine
+        .cancel_job(
+            held,
+            &support::principal(&front.app.engine, "alice", PASSWORD).await,
+        )
+        .await
+        .unwrap();
     let mut invalid = desired.clone();
     invalid
         .media_types
@@ -582,8 +590,11 @@ async fn profile_validation_gate_durable_apply_and_immutable_job_snapshots() {
     assert_eq!(configuration_time(&front).await.0, applied_time);
     assert_eq!(settings(&front.app.config).defaults.quality, 5);
     assert_eq!(
-        front.app.printers["demo"]
-            .read()
+        front
+            .app
+            .printer("demo")
+            .unwrap()
+            .read_owned()
             .await
             .profile
             .capabilities()
@@ -608,15 +619,25 @@ async fn profile_validation_gate_durable_apply_and_immutable_job_snapshots() {
             .status(),
         409
     );
-    front.app.engine.cancel_job(new_job, "bob").await.unwrap();
+    front
+        .app
+        .engine
+        .cancel_job(
+            new_job,
+            &support::principal(&front.app.engine, "bob", PASSWORD).await,
+        )
+        .await
+        .unwrap();
     drop(front);
     tokio::time::sleep(Duration::from_millis(20)).await;
     let reopened = ferriprint::server::App::open(restart).await.unwrap();
     let restarted = Frontend::from_app(reopened.clone()).await;
     assert_eq!(configuration_time(&restarted).await.0, applied_time);
     assert_eq!(
-        reopened.printers["demo"]
-            .read()
+        reopened
+            .printer("demo")
+            .unwrap()
+            .read_owned()
             .await
             .profile
             .capabilities()
@@ -661,7 +682,7 @@ async fn active_backend_identity_cannot_be_removed_changed_or_silently_migrated(
     let held = engine
         .create_job(
             "demo",
-            "alice",
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
             "immutable backend",
             "application/pdf",
             resolved,
@@ -677,7 +698,13 @@ async fn active_backend_identity_cannot_be_removed_changed_or_silently_migrated(
         engine.get_job(held.id).await.unwrap().unwrap().phase,
         "held"
     );
-    engine.cancel_job(held.id, "alice").await.unwrap();
+    engine
+        .cancel_job(
+            held.id,
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+        )
+        .await
+        .unwrap();
     drop(engine);
     // Terminal history remains readable after a protected queue identity update.
     let engine = JobEngine::open(&changed).await.unwrap();
@@ -825,10 +852,16 @@ async fn discovery_authentication_requirements_follow_source_policy_without_impl
 async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_choices() {
     let dir = tempfile::tempdir().unwrap();
     let receiver = Receiver::start().await;
-    let cfg = config(dir.path(), &receiver.uri(), 0);
+    let mut cfg = config(dir.path(), &receiver.uri(), 0);
     let settings = settings(&cfg);
     std::fs::remove_file(cfg.profile_path("demo")).unwrap();
-    let bootstrap = dir.path().join("bootstrap.toml");
+    cfg.printers.clear();
+    std::fs::write(
+        cfg.state_dir.join("printers.toml"),
+        toml::to_string_pretty(&ferriprint::managed::PrinterCatalog::default()).unwrap(),
+    )
+    .unwrap();
+    let bootstrap = dir.path().join("protected.toml");
     std::fs::write(&bootstrap, toml::to_string_pretty(&cfg).unwrap()).unwrap();
     let mut choices = SetupChoices {
         confirmed_native_mappings: true,
@@ -844,20 +877,24 @@ async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_cho
         }],
     };
     let choices_path = dir.path().join("choices.toml");
-    std::fs::write(&choices_path, toml::to_string_pretty(&choices).unwrap()).unwrap();
-    let output = dir.path().join("installed.toml");
     let binary = env!("CARGO_BIN_EXE_ferriprint");
     let args = vec![
-        "setup".to_owned(),
-        "install".into(),
-        "--bootstrap".into(),
+        "--config".to_owned(),
         bootstrap.display().to_string(),
+        "setup".into(),
+        "install".into(),
+        "--source".into(),
+        "local".into(),
+        "--queue".into(),
+        "receiver".into(),
         "--printer".into(),
         "demo".into(),
+        "--display-name".into(),
+        "Synthetic Photo".into(),
+        "--service-name".into(),
+        "Synthetic Photo".into(),
         "--choices".into(),
         choices_path.display().to_string(),
-        "--output".into(),
-        output.display().to_string(),
         "--confirm".into(),
     ];
     let original = choices
@@ -873,13 +910,16 @@ async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_cho
     .await
     .unwrap();
     assert!(!invalid.status.success());
-    assert!(!output.exists() && !cfg.profile_path("demo").exists());
+    assert!(!cfg.profile_path("demo").exists());
+    assert!(Config::load(&bootstrap).unwrap().printers.is_empty());
     choices.settings.sources.insert("main".into(), original);
     std::fs::write(&choices_path, toml::to_string_pretty(&choices).unwrap()).unwrap();
-    let installed =
-        tokio::task::spawn_blocking(move || Command::new(binary).args(args).output().unwrap())
-            .await
-            .unwrap();
+    let install_args = args.clone();
+    let installed = tokio::task::spawn_blocking(move || {
+        Command::new(binary).args(install_args).output().unwrap()
+    })
+    .await
+    .unwrap();
     assert!(
         installed.status.success(),
         "{}",
@@ -887,7 +927,7 @@ async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_cho
     );
     let checked = Command::new(binary)
         .arg("--config")
-        .arg(&output)
+        .arg(&bootstrap)
         .arg("check")
         .output()
         .unwrap();
@@ -896,8 +936,22 @@ async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_cho
         "{}",
         String::from_utf8_lossy(&checked.stderr)
     );
-    let installed_cfg = Config::load(&output).unwrap();
-    let front = Frontend::start(installed_cfg).await;
+    let catalog_before = std::fs::read(cfg.state_dir.join("printers.toml")).unwrap();
+    let profile_before = std::fs::read(cfg.profile_path("demo")).unwrap();
+    let duplicate =
+        tokio::task::spawn_blocking(move || Command::new(binary).args(args).output().unwrap())
+            .await
+            .unwrap();
+    assert!(!duplicate.status.success());
+    assert_eq!(
+        std::fs::read(cfg.state_dir.join("printers.toml")).unwrap(),
+        catalog_before
+    );
+    assert_eq!(
+        std::fs::read(cfg.profile_path("demo")).unwrap(),
+        profile_before
+    );
+    let front = Frontend::start(Config::load(&bootstrap).unwrap()).await;
     let mut request = front.request(Operation::PrintJob, None);
     add(
         &mut request,
@@ -916,22 +970,9 @@ async fn real_setup_cli_installs_confirmed_photo_profile_and_rejects_invalid_cho
     front.app.engine.tick().await.unwrap();
     assert_eq!(receiver.device.jobs.lock()[0].options["MediaType"], "Photo");
     assert_eq!(receiver.device.jobs.lock()[0].options["Quality"], "Fine");
-    // Setup cannot overwrite either file, even with --confirm.
-    let duplicate = Command::new(binary)
-        .args(["setup", "install", "--bootstrap"])
-        .arg(&bootstrap)
-        .args(["--printer", "demo", "--choices"])
-        .arg(&choices_path)
-        .arg("--output")
-        .arg(&output)
-        .arg("--confirm")
-        .output()
-        .unwrap();
-    assert!(!duplicate.status.success());
-    let mut bad = choices;
-    bad.settings.schema_version = 9;
+    choices.settings.schema_version = 9;
     let badfile = dir.path().join("bad-profile.toml");
-    std::fs::write(&badfile, toml::to_string_pretty(&bad.settings).unwrap()).unwrap();
+    std::fs::write(&badfile, toml::to_string_pretty(&choices.settings).unwrap()).unwrap();
     assert!(ferriprint::config::ProfileSettings::load(&badfile).is_err());
 }
 
@@ -963,17 +1004,24 @@ async fn password_cli_never_uses_argv_and_hash_file_has_private_permissions() {
         std::fs::metadata(&output).unwrap().permissions().mode() & 0o777,
         0o600
     );
-    let access = ferriprint::config::AccessConfig {
-        anonymous_trusted_lan: false,
-        anonymous_owner: None,
-        anonymous_clients: Vec::new(),
-        users: vec![ferriprint::config::UserConfig {
-            username: "operator".into(),
+    let cfg = config(dir.path(), "ipp://127.0.0.1:9/printers/receiver", 0);
+    let path = cfg.state_dir.join("access.toml");
+    let mut access: ferriprint::auth::AccessState =
+        toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    access.accounts.insert(
+        "operator".into(),
+        ferriprint::auth::Account {
             role: Role::User,
-            password_hash_file: output,
-        }],
-    };
-    let authenticator = ferriprint::auth::Authenticator::open(&access).unwrap();
+            enabled: true,
+            password_hash: ferriprint::auth::read_password_hash(&output)
+                .unwrap()
+                .into(),
+            revision: 1,
+            printers: std::collections::BTreeSet::from(["demo".into()]),
+        },
+    );
+    std::fs::write(path, toml::to_string_pretty(&access).unwrap()).unwrap();
+    let authenticator = ferriprint::auth::Authenticator::open(&cfg).unwrap();
     let header = |password: &str| {
         format!(
             "Basic {}",
@@ -997,8 +1045,8 @@ async fn macos_extended_acl_cannot_bypass_private_credential_mode() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = config(dir.path(), "ipp://127.0.0.1:9/printers/receiver", 0);
     add_user(&mut cfg, "office-user", Role::User, PASSWORD);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_ok());
-    let path = &cfg.access.users[0].password_hash_file;
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_ok());
+    let path = &cfg.state_dir.join("access.toml");
     assert!(
         Command::new("/bin/chmod")
             .args(["+a", "everyone allow read"])
@@ -1012,7 +1060,7 @@ async fn macos_extended_acl_cannot_bypass_private_credential_mode() {
         std::fs::metadata(path).unwrap().permissions().mode() & 0o077,
         0
     );
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
 }
 
 #[cfg(target_os = "linux")]
@@ -1023,7 +1071,7 @@ async fn service_specific_credential_acl_authenticates_but_untrusted_access_is_r
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = config(dir.path(), "ipp://127.0.0.1:9/printers/receiver", 0);
     add_user(&mut cfg, "office-user", Role::User, PASSWORD);
-    let file = std::fs::File::open(&cfg.access.users[0].password_hash_file).unwrap();
+    let file = std::fs::File::open(cfg.state_dir.join("access.toml")).unwrap();
     let service_uid = unsafe { libc::geteuid() };
     let set_acl = |named_uid: u32,
                    group_permission: u16,
@@ -1069,7 +1117,7 @@ async fn service_specific_credential_acl_authenticates_but_untrusted_access_is_r
     set_acl(service_uid, 0, 0, 0, 4);
     // The group-class mode contains an ACL mask despite group:: having no access.
     assert_ne!(file.metadata().unwrap().permissions().mode() & 0o070, 0);
-    let authenticator = ferriprint::auth::Authenticator::open(&cfg.access).unwrap();
+    let authenticator = ferriprint::auth::Authenticator::open(&cfg).unwrap();
     let header = format!(
         "Basic {}",
         base64::engine::general_purpose::STANDARD.encode(format!("office-user:{PASSWORD}"))
@@ -1079,25 +1127,25 @@ async fn service_specific_credential_acl_authenticates_but_untrusted_access_is_r
         "office-user"
     );
     set_acl(service_uid.saturating_add(1), 0, 0, 0, 4);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
     set_acl(service_uid, 4, 0, 0, 4);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
     set_acl(service_uid, 0, 4, 0, 4);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
     set_acl(service_uid, 0, 0, 4, 4);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
     set_acl(service_uid.saturating_add(1), 0, 0, 0, 2);
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_ok());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_ok());
     assert_eq!(
         unsafe { libc::fremovexattr(file.as_raw_fd(), c"system.posix_acl_access".as_ptr()) },
         0
     );
     std::fs::set_permissions(
-        &cfg.access.users[0].password_hash_file,
+        cfg.state_dir.join("access.toml"),
         std::fs::Permissions::from_mode(0o440),
     )
     .unwrap();
-    assert!(ferriprint::auth::Authenticator::open(&cfg.access).is_err());
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
 }
 
 #[test]
@@ -1112,10 +1160,13 @@ fn anonymous_admission_requires_explicit_subnet_policy_and_owner_distinct_from_u
     cfg.access.anonymous_clients.clear();
     assert!(cfg.validate().is_err());
     cfg.access.anonymous_clients = vec!["192.0.2.7/32".parse().unwrap()];
-    cfg.access.users.push(ferriprint::config::UserConfig {
-        username: cfg.access.anonymous_owner.clone().unwrap(),
-        role: Role::User,
-        password_hash_file: dir.path().join("not-read-by-policy-validation"),
-    });
-    assert!(cfg.validate().is_err());
+    let path = cfg.state_dir.join("access.toml");
+    let mut access: ferriprint::auth::AccessState =
+        toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    access.accounts.insert(
+        cfg.access.anonymous_owner.clone().unwrap(),
+        access.accounts["alice"].clone(),
+    );
+    std::fs::write(path, toml::to_string_pretty(&access).unwrap()).unwrap();
+    assert!(ferriprint::auth::Authenticator::open(&cfg).is_err());
 }

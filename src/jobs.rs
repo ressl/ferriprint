@@ -2,12 +2,13 @@
 // Copyright (C) 2026 Robert Ressl
 
 use crate::{
+    auth::{Authenticator, Principal},
     config::{BackendIdentity, Config},
     domain::ResolvedJob,
     upstream::{RemoteJob, Upstream},
 };
 use anyhow::{Context, Result, ensure};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -51,8 +52,8 @@ pub struct JobRecord {
 pub struct JobEngine {
     db: Mutex<Connection>,
     spool: PathBuf,
-    backends: HashMap<String, Upstream>,
-    identities: HashMap<String, BackendIdentity>,
+    backends: RwLock<HashMap<String, (Upstream, BackendIdentity)>>,
+    pub auth: Arc<Authenticator>,
     max_bytes: u64,
     max_jobs: usize,
     poll: Duration,
@@ -88,17 +89,26 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 fn save(db: &Connection, job: &JobRecord) -> Result<()> {
-    db.execute(
-        "UPDATE jobs SET record=?1,state=?2,printer=?4,owner=?5 WHERE id=?3",
-        params![
-            serde_json::to_string(job)?,
-            job.state,
-            job.id,
-            job.printer,
-            job.owner
-        ],
-    )?;
-    Ok(())
+    db.execute_batch("SAVEPOINT ferriprint_job_save")?;
+    let result = (|| {
+        db.execute(
+            "UPDATE jobs SET record=?1,state=?2,printer=?4,owner=?5 WHERE id=?3",
+            params![
+                serde_json::to_string(job)?,
+                job.state,
+                job.id,
+                job.printer,
+                job.owner
+            ],
+        )?;
+        crate::notifications::record_job_transition(db, job)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        db.execute_batch("ROLLBACK TO ferriprint_job_save")?;
+    }
+    db.execute_batch("RELEASE ferriprint_job_save")?;
+    result
 }
 fn load(db: &Connection, id: i32) -> Result<Option<JobRecord>> {
     db.query_row("SELECT record FROM jobs WHERE id=?1", [id], |row| {
@@ -117,16 +127,8 @@ fn terminal(job: &mut JobRecord, state: i32, reason: &str, message: &str) {
 }
 impl JobEngine {
     pub async fn open(config: &Config) -> Result<Arc<Self>> {
-        std::fs::create_dir_all(&config.state_dir)?;
-        std::fs::set_permissions(&config.state_dir, std::fs::Permissions::from_mode(0o700))?;
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(config.state_dir.join("service.lock"))?;
-        fs2::FileExt::try_lock_exclusive(&lock).context("state directory is already in use")?;
+        let lock = crate::managed::lock_state(config)?;
+        let auth = Authenticator::open(config)?;
         let spool = config.state_dir.join("spool");
         std::fs::create_dir_all(&spool)?;
         std::fs::set_permissions(&spool, std::fs::Permissions::from_mode(0o700))?;
@@ -141,6 +143,10 @@ impl JobEngine {
         );
         let db = Connection::open(db_path)?;
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, state INTEGER NOT NULL, printer TEXT NOT NULL, owner TEXT NOT NULL, record TEXT NOT NULL); CREATE INDEX IF NOT EXISTS jobs_printer_state ON jobs(printer,state); CREATE INDEX IF NOT EXISTS jobs_state ON jobs(state); CREATE INDEX IF NOT EXISTS jobs_printer_owner_id ON jobs(printer,owner,id);")?;
+        crate::notifications::initialize_database(
+            &db,
+            config.notifications.as_ref().is_some_and(|c| c.enabled),
+        )?;
         db.execute_batch("CREATE TABLE IF NOT EXISTS service_meta (key TEXT PRIMARY KEY,value INTEGER NOT NULL);")?;
         db.execute(
             "INSERT OR IGNORE INTO service_meta (key,value) VALUES ('time-origin',?1)",
@@ -155,7 +161,10 @@ impl JobEngine {
         for printer in &config.printers {
             backends.insert(
                 printer.name.clone(),
-                Upstream::new(printer, Duration::from_secs(config.backend_timeout_secs))?,
+                (
+                    Upstream::new(printer, Duration::from_secs(config.backend_timeout_secs))?,
+                    printer.backend_identity(),
+                ),
             );
         }
         let identities: HashMap<_, _> = config
@@ -226,8 +235,8 @@ impl JobEngine {
         Ok(Arc::new(Self {
             db: Mutex::new(db),
             spool,
-            backends,
-            identities,
+            backends: RwLock::new(backends),
+            auth,
             max_bytes: config.max_document_bytes,
             max_jobs: config.max_queued_jobs,
             poll: Duration::from_millis(config.poll_interval_ms),
@@ -238,54 +247,71 @@ impl JobEngine {
     pub async fn create_job(
         &self,
         printer: &str,
-        owner: &str,
+        principal: &Principal,
         title: &str,
         format: &str,
         resolved: ResolvedJob,
     ) -> Result<JobRecord> {
-        ensure!(self.backends.contains_key(printer), "unknown printer");
-        ensure!(
-            owner.len() <= 255 && title.len() <= 255,
-            "job metadata too long"
-        );
-        let mut db = self.db.lock();
-        let tx = db.transaction()?;
-        let active: i64 = tx.query_row("SELECT COUNT(*) FROM jobs WHERE state < 7", [], |r| {
-            r.get(0)
-        })?;
-        ensure!(active < self.max_jobs as i64, "queue capacity reached");
-        tx.execute(
-            "INSERT INTO jobs (state,printer,owner,record) VALUES (4,?1,?2,'')",
-            params![printer, owner],
-        )?;
-        let id =
-            i32::try_from(tx.last_insert_rowid()).context("IPP job identifier space exhausted")?;
-        let job = JobRecord {
-            id,
-            uuid: format!("urn:uuid:{}", uuid::Uuid::new_v4()),
-            printer: printer.into(),
-            owner: owner.into(),
-            title: title.into(),
-            document_format: format.into(),
-            resolved,
-            state: 4,
-            reasons: vec!["job-data-insufficient".into()],
-            message: "Waiting for one document".into(),
-            created_at: now(),
-            processing_at: None,
-            completed_at: None,
-            document_bytes: 0,
-            upstream_id: None,
-            upstream_uri: None,
-            impressions_completed: 0,
-            sheets_completed: 0,
-            phase: "held".into(),
-            cancel_requested: false,
-            backend_identity: self.identities.get(printer).cloned(),
-        };
-        save(&tx, &job)?;
-        tx.commit()?;
-        Ok(job)
+        self.auth.with_access(principal, Some(printer), false, || {
+            let owner = principal.username.as_str();
+            let backend_identity = self
+                .backends
+                .read()
+                .get(printer)
+                .map(|(_, identity)| identity.clone())
+                .context("unknown printer")?;
+            ensure!(
+                owner.len() <= 255 && title.len() <= 255,
+                "job metadata too long"
+            );
+            let mut db = self.db.lock();
+            let tx = db.transaction()?;
+            let active: i64 =
+                tx.query_row("SELECT COUNT(*) FROM jobs WHERE state < 7", [], |r| {
+                    r.get(0)
+                })?;
+            ensure!(active < self.max_jobs as i64, "queue capacity reached");
+            tx.execute(
+                "INSERT INTO jobs (state,printer,owner,record) VALUES (4,?1,?2,'')",
+                params![printer, owner],
+            )?;
+            let id = i32::try_from(tx.last_insert_rowid())
+                .context("IPP job identifier space exhausted")?;
+            let job = JobRecord {
+                id,
+                uuid: format!("urn:uuid:{}", uuid::Uuid::new_v4()),
+                printer: printer.into(),
+                owner: owner.into(),
+                title: title.into(),
+                document_format: format.into(),
+                resolved,
+                state: 4,
+                reasons: vec!["job-data-insufficient".into()],
+                message: "Waiting for one document".into(),
+                created_at: now(),
+                processing_at: None,
+                completed_at: None,
+                document_bytes: 0,
+                upstream_id: None,
+                upstream_uri: None,
+                impressions_completed: 0,
+                sheets_completed: 0,
+                phase: "held".into(),
+                cancel_requested: false,
+                backend_identity: Some(backend_identity),
+            };
+            save(&tx, &job)?;
+            tx.commit()?;
+            Ok(job)
+        })
+    }
+    pub(crate) fn database(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        self.db.lock()
+    }
+    pub fn register_backend(&self, config: &crate::config::PrinterConfig, upstream: Upstream) {
+        self.backends
+            .write()
+            .insert(config.name.clone(), (upstream, config.backend_identity()));
     }
     fn payload(&self, id: i32) -> PathBuf {
         self.spool.join(format!("{id}.document"))
@@ -296,36 +322,49 @@ impl JobEngine {
     pub fn uptime(&self) -> i32 {
         (now() - self.time_origin).clamp(0, i32::MAX as i64) as i32
     }
-    pub async fn set_document_format(&self, id: i32, owner: &str, format: &str) -> Result<()> {
-        let db = self.db.lock();
-        let mut job = load(&db, id)?.context("job not found")?;
-        ensure!(job.owner == owner, "not authorized");
-        ensure!(
-            job.phase == "held" && job.state == 4,
-            "job does not accept a document"
-        );
-        job.document_format = format.into();
-        job.resolved.document_format = format.into();
-        save(&db, &job)
+    pub async fn set_document_format(
+        &self,
+        id: i32,
+        principal: &Principal,
+        format: &str,
+    ) -> Result<()> {
+        let printer = self.get_job(id).await?.context("job not found")?.printer;
+        self.auth.with_access(principal, Some(&printer), false, || {
+            let db = self.db.lock();
+            let mut job = load(&db, id)?.context("job not found")?;
+            ensure!(job.owner == principal.username, "not authorized");
+            ensure!(
+                job.phase == "held" && job.state == 4,
+                "job does not accept a document"
+            );
+            job.document_format = format.into();
+            job.resolved.document_format = format.into();
+            save(&db, &job)
+        })
     }
     pub async fn ingest_document<R: AsyncRead + Unpin + Send>(
         &self,
         id: i32,
-        owner: &str,
+        principal: &Principal,
         mut reader: R,
     ) -> Result<JobRecord> {
-        {
-            let db = self.db.lock();
-            let mut job = load(&db, id)?.context("job not found")?;
-            ensure!(job.owner == owner, "not authorized to attach document");
-            ensure!(
-                job.phase == "held" && job.state == 4,
-                "job does not accept another document"
-            );
-            job.phase = "uploading".into();
-            job.message = "Receiving document".into();
-            save(&db, &job)?;
-        }
+        let printer = self.get_job(id).await?.context("job not found")?.printer;
+        self.auth
+            .with_access(principal, Some(&printer), false, || {
+                let db = self.db.lock();
+                let mut job = load(&db, id)?.context("job not found")?;
+                ensure!(
+                    job.owner == principal.username,
+                    "not authorized to attach document"
+                );
+                ensure!(
+                    job.phase == "held" && job.state == 4,
+                    "job does not accept another document"
+                );
+                job.phase = "uploading".into();
+                job.message = "Receiving document".into();
+                save(&db, &job)
+            })?;
         let _guard = UploadGuard { engine: self, id };
         let path = self.spool.join(format!("{id}.part"));
         let result: Result<u64> = async {
@@ -336,6 +375,10 @@ impl JobEngine {
             let mut bytes = 0u64;
             loop {
                 let n = reader.read(&mut buffer).await?;
+                ensure!(
+                    self.auth.can_print(principal, &printer),
+                    "not authorized: account/password/printer access changed during upload"
+                );
                 if n == 0 {
                     break;
                 }
@@ -353,7 +396,7 @@ impl JobEngine {
         }
         .await;
         match result {
-            Ok(bytes) => {
+            Ok(bytes) => self.auth.with_access(principal, Some(&printer), false, || {
                 let db = self.db.lock();
                 let mut job = load(&db, id)?.context("job disappeared")?;
                 if job.phase != "uploading" || job.cancel_requested {
@@ -369,7 +412,7 @@ impl JobEngine {
                 job.message = "Queued for native CUPS submission".into();
                 save(&db, &job)?;
                 Ok(job)
-            }
+            }),
             Err(error) => {
                 let _ = tokio::fs::remove_file(path).await;
                 let db = self.db.lock();
@@ -445,11 +488,12 @@ impl JobEngine {
         self.cleanup(id).await;
         Ok(job)
     }
-    pub async fn cancel_job(&self, id: i32, owner: &str) -> Result<JobRecord> {
-        let mut job = {
+    pub async fn cancel_job(&self, id: i32, principal: &Principal) -> Result<JobRecord> {
+        let printer = self.get_job(id).await?.context("job not found")?.printer;
+        let mut job = self.auth.with_access(principal,Some(&printer),false,|| {
             let db = self.db.lock();
             let mut job = load(&db, id)?.context("job not found")?;
-            ensure!(job.owner == owner, "not authorized to cancel job");
+            ensure!(principal.is_admin() || job.owner == principal.username, "not authorized to cancel job");
             ensure!(job.state < 7, "job is already terminal");
             ensure!(
                 job.phase != "uncertain" || job.upstream_id.is_some(),
@@ -469,10 +513,16 @@ impl JobEngine {
                 job.message = "Cancellation requested; awaiting upstream confirmation".into();
             }
             save(&db, &job)?;
-            job
-        };
+            Ok(job)
+        })?;
+        let backend = self
+            .backends
+            .read()
+            .get(&job.printer)
+            .map(|(backend, _)| backend.clone())
+            .context("job backend unavailable")?;
         if let Some(remote) = job.upstream_id
-            && let Err(error) = self.backends[&job.printer].cancel(remote).await
+            && let Err(error) = backend.cancel(remote).await
         {
             let db = self.db.lock();
             job = load(&db, id)?.context("job missing")?;
@@ -536,15 +586,20 @@ impl JobEngine {
         };
         for record in all {
             let job: JobRecord = serde_json::from_str(&record)?;
-            let Some(backend) = self.backends.get(&job.printer) else {
+            let backend = self
+                .backends
+                .read()
+                .get(&job.printer)
+                .map(|(backend, _)| backend.clone());
+            let Some(backend) = backend else {
                 continue;
             };
             if job.phase == "queued" {
-                let submit = {
+                let submit = match self.auth.with_owner_access(&job.owner, &job.printer, || {
                     let db = self.db.lock();
                     let mut current = load(&db, job.id)?.context("job missing")?;
                     if current.phase != "queued" || current.cancel_requested {
-                        false
+                        Ok(false)
                     } else {
                         current.phase = "submitting".into();
                         current.state = 5;
@@ -552,7 +607,26 @@ impl JobEngine {
                         current.message =
                             "Submitting to native CUPS; acceptance not yet known".into();
                         save(&db, &current)?;
-                        true
+                        Ok(true)
+                    }
+                }) {
+                    Ok(submit) => submit,
+                    Err(_) => {
+                        {
+                            let db = self.db.lock();
+                            let mut current = load(&db, job.id)?.context("job missing")?;
+                            if current.phase == "queued" {
+                                terminal(
+                                    &mut current,
+                                    8,
+                                    "account-authorization-revoked",
+                                    "Account disabled or printer permission revoked before submission; not submitted",
+                                );
+                                save(&db, &current)?;
+                            }
+                        }
+                        self.cleanup(job.id).await;
+                        false
                     }
                 };
                 if !submit {

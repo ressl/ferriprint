@@ -7,10 +7,12 @@ Never reuse these submission/cancellation steps on a physical-backed endpoint.
 
 Use a real browser and the exact HTTP(S) origin configured by `public_url`; swapping
 `127.0.0.1` for `localhost` changes the origin and invalidates this exercise.
-The source contains a non-printing `receiver` example; the setup/deployment guide
-explains the separate bootstrap and managed-profile files. Provision isolated
-admin and two user identities with distinct generated credentials and protected
-Argon2id files. Do not put credentials in URLs, command arguments or shared logs.
+The source contains a non-printing `receiver` example. In0.3, initialize its empty
+managed state through the real `user init` command (hidden terminal/bounded stdin
+password), then use browser account administration for distinct admin/two-user
+identities and explicit printer grants. Configure only the literal-loopback trusted
+CUPS source. Do not inject fabricated managed records, put credentials in argv/
+URLs, or treat the historical0.2 credential/bootstrap setup as0.3 acceptance.
 
 ## Real native form regression
 
@@ -96,6 +98,56 @@ invented zero ink or a healthy state. Restore or remove only the owned isolated
 receiver. Never stop native CUPS or block a real printer in order to demonstrate a
 status error.
 
+## 0.3 real wizard, accounts, recipes and notifications
+
+These are additional current-interface gates, not results inferred from the0.2
+observations above. Use separate real browser contexts, inspect their displayed
+principals and prove downstream effects against the nonprinting receiver.
+
+1. Start with an initialized administrator and **empty** catalog. At
+   `/admin/onboarding`, select the configured source/returned queue, acquire its
+   synthetic PPD, complete identity/native mappings/defaults/full recipes/review
+   and commit using actual controls with no manual per-printer TOML. Verify the
+   HTTP route and persisted catalog/PPD/profile; keep saved/HTTP-active distinct
+   from actual pending/published/failed discovery. Restart and repeat metadata/
+   grant checks. Changed PPD/queue, stale review, duplicate identity, foreign
+   resource, permission/size failure, non-admin and CSRF cases must leave no
+   active partial binding or native queue/default change.
+2. At `/admin/users`, create a normal user with only printer A. Log in separately,
+   prove A access and B/job/status denial, rotate the password and prove the old
+   password fails. Suspend/revoke during a controlled slow upload and queued
+   pre-submission work: no unauthorized new receiver job may appear. Reactivate
+   deliberately. Exercise own-password verification, reserved names, concurrent
+   last-admin protection and restart durability without exposing PHCs.
+3. Through `/admin/printers/NAME/recipes`, validate/save complete A4-normal,
+   supported A3-borderless-high and duplex tickets. Inspect all fields/native
+   options, standard `job-presets-supported` requested-attribute filtering and
+   authorized export. A native client copies the selected standard attributes;
+   do not invent a `job-preset-name` selector or fake GUI visibility. Observe
+   actual downstream options, explicit-override precedence, rejection with no
+   submission, unchanged historical jobs and stable tickets after default edits/
+   restart. Profile/recipe saves must still respect active-job/revision gates.
+4. Configure only the existing isolated webhook receiver in protected startup
+   transport settings. At `/admin/notifications`, enable events and deliver a
+   real diagnostic, failed/stopped-job, source-outage and source-reported
+   paper-shortage transition plus observed recoveries. Verify actual received
+   payloads, stable IDs, privacy fields and durable attempts. Repeated polls/
+   restart must not duplicate transitions; unknown/stale observations must not
+   resolve paper. Exercise non-2xx/timeout/pending restart/exhaustion/explicit
+   retry and receiver deduplication. A queued row/button response is not delivery.
+5. Stop the isolated0.2 fixture before migration. Give its old runtime PHC paths
+   deliberately nonexistent systemd locations and retain protected persistent
+   originals. Without the explicit credential-source map it must fail without
+   changing jobs; with the exact map original passwords and historical ownership/
+   IDs/sequence/time origin/resolved backend settings survive without replay.
+   Test private permissions, symlinks, missing/extra keys and held-lock failures.
+
+The example receiver's graceful SIGINT ledger is authoritative for actual
+received documents/options and duplicate detection. Query known upstream IDs
+with Get-Job-Attributes and independently confirm cancellation; do not send an
+unsupported Get-Jobs operation to the receiver or call two principals two physical
+Macs. Native UI/hardware coverage remains separate from browser/protocol evidence.
+
 ## Linux discovery and distribution
 
 Use a distinct non-production service name/port/state with the non-printing
@@ -107,3 +159,11 @@ Versioned package exercises run only in disposable digest-pinned Linux container
 as described in [installation](release-and-installation.md). Source member proof,
 locked notices and package ownership/removal checks are independent release gates;
 passing browser tests does not imply those gates passed.
+
+For both native release architectures, the package exerciser installs/reconfigures/
+removes/purges the actual package and performs the documented tar installation.
+Each installed executable runs as the dedicated nonroot service UID through
+genuine0.3 init/setup/check/serve, receiver GPA/Validate/Print/known-ID cancellation,
+restart, served-source equality and exact one-job ledger. QA receiver binaries
+stay outside release assets. These gates do not substitute for the real0.3
+browser flows above or claim additional physical clients/printers.

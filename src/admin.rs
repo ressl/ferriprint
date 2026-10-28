@@ -23,7 +23,7 @@ use std::{
 };
 
 /// Escape once while writing; never copy/replace the complete input repeatedly.
-struct Escape<'a>(&'a str);
+pub(crate) struct Escape<'a>(pub(crate) &'a str);
 impl fmt::Display for Escape<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for c in self.0.chars() {
@@ -39,18 +39,18 @@ impl fmt::Display for Escape<'_> {
         Ok(())
     }
 }
-fn page(title: &str) -> String {
+pub(crate) fn page(title: &str) -> String {
     format!(
         "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{}</title><style>body{{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem}}textarea{{width:100%;min-height:30rem;font:14px monospace}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}td,th{{padding:.4rem;text-align:left;border-bottom:1px solid #ddd}}button{{padding:.5rem}}details{{margin:1rem 0}}.warning{{color:#8b2000}}</style><nav><a href=\"/\">My jobs</a> · <a href=\"/admin\">Administration</a> · <a href=\"/source\">Corresponding source</a></nav><h1>{}</h1>",
         Escape(title),
         Escape(title)
     )
 }
-fn finish(mut body: String) -> Html<String> {
+pub(crate) fn finish(mut body: String) -> Html<String> {
     body.push_str("<footer><p>Copyright © 2026 Robert Ressl. GNU AGPL version 3 only. <a href=\"/source\">Corresponding Source matching this build</a>. Native CUPS remains the renderer; no printer-program certification is claimed.</p></footer></html>");
     Html(body)
 }
-fn error(status: StatusCode, message: impl fmt::Display) -> Response {
+pub(crate) fn error(status: StatusCode, message: impl fmt::Display) -> Response {
     let mut body = page("Ferriprint request not applied");
     let _ = write!(
         body,
@@ -182,7 +182,7 @@ fn telemetry_html(body: &mut String, snapshot: &crate::telemetry::TelemetrySnaps
     }
     body.push_str("</section>");
 }
-fn selector<'a>(
+pub(crate) fn selector<'a>(
     body: &mut String,
     label: &str,
     name: &str,
@@ -210,11 +210,14 @@ fn selector<'a>(
 }
 async fn visible_jobs(app: &App, principal: &Principal) -> anyhow::Result<Vec<JobRecord>> {
     let mut jobs = Vec::new();
-    for name in app.printers.keys() {
+    for (name, _) in app.printer_snapshot() {
+        if !app.auth.can_print(principal, &name) {
+            continue;
+        }
         jobs.extend(
             app.engine
                 .query_jobs(
-                    name,
+                    &name,
                     (!principal.is_admin()).then_some(principal.username.as_str()),
                     "all",
                     1000,
@@ -292,13 +295,16 @@ pub async fn status_page(
             "deliberately shared trusted-LAN owner"
         }
     );
-    for (name, entry) in &app.printers {
+    for (name, entry) in app.printer_snapshot() {
+        if !app.auth.can_print(&principal, &name) {
+            continue;
+        }
         let printer = entry.read().await;
         let _ = write!(
             body,
             "<section><h2>{}</h2><p><code>{}</code></p>",
             Escape(&printer.config.display_name),
-            Escape(&app.config.printer_uri(name))
+            Escape(&app.config.printer_uri(&name))
         );
         match printer.upstream.inspect().await {
             Ok(status) => {
@@ -326,6 +332,20 @@ pub async fn status_page(
             );
         }
         body.push_str("</section>");
+        if !printer.profile.recipes().is_empty() {
+            body.push_str("<h3>Complete print recipes</h3><ul>");
+            for (key, recipe) in printer.profile.recipes() {
+                let _ = write!(
+                    body,
+                    "<li>{}: {} — <a href=\"/api/printers/{}/recipes/{}\">complete standard native CUPS options</a></li>",
+                    Escape(key),
+                    Escape(&recipe.display_name),
+                    Escape(&name),
+                    Escape(key)
+                );
+            }
+            body.push_str("</ul><p>Native clients copy the standard job-presets-supported template members. A client GUI dropdown is not assumed.</p>");
+        }
     }
     match visible_jobs(&app, &principal).await {
         Ok(jobs) => {
@@ -334,6 +354,12 @@ pub async fn status_page(
             }
         }
         Err(_) => return error(StatusCode::INTERNAL_SERVER_ERROR, "Job storage unavailable"),
+    }
+    if !app.auth.current(&principal) {
+        return error(
+            StatusCode::FORBIDDEN,
+            "Account authority changed; authenticate again",
+        );
     }
     finish(body).into_response()
 }
@@ -345,13 +371,26 @@ pub async fn admin_page(
         return error(StatusCode::FORBIDDEN, "Administrator role required");
     }
     let mut body = page("Ferriprint administration");
-    body.push_str("<p>Edit, validate, save and immediately activate existing printer mapping/default settings below. Queue identity, PPD paths, TLS, network admission and credentials are protected bootstrap configuration; new queues are installed with the setup CLI, never a browser path/URI editor.</p><ul>");
-    for (name, entry) in &app.printers {
+    body.push_str("<p><a href=\"/admin/onboarding\">Add an existing native CUPS queue</a> · <a href=\"/admin/users\">Accounts and per-printer permissions</a> · <a href=\"/admin/notifications\">Active webhook notifications</a> · <a href=\"/account\">Change own password</a></p><p>Mappings, defaults and complete recipes use the existing native CUPS renderer. Backend/network/TLS/credential-source authority is never a browser path or URI editor.</p><ul>");
+    let publication = app.discovery_status.read().clone();
+    let _ = write!(
+        body,
+        "<p>Discovery: {} · revision {} · {}</p>",
+        Escape(&publication.state),
+        publication.revision,
+        Escape(
+            publication
+                .failure
+                .as_deref()
+                .unwrap_or("no reported registration failure")
+        )
+    );
+    for (name, entry) in app.printer_snapshot() {
         let printer = entry.read().await;
         let _ = write!(
             body,
             "<li><a href=\"/admin/printers/{}\">{}</a> — active revision {}</li>",
-            Escape(name),
+            Escape(&name),
             Escape(&printer.config.display_name),
             printer.revision
         );
@@ -376,7 +415,7 @@ pub async fn profile_page(
     if !principal.is_admin() {
         return error(StatusCode::FORBIDDEN, "Administrator role required");
     }
-    let Some(entry) = app.printers.get(&name) else {
+    let Some(entry) = app.printer(&name) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let printer = entry.read().await;
@@ -388,6 +427,11 @@ pub async fn profile_page(
         body,
         "<p>Active revision {}. Save requires no active/held/uncertain jobs on this printer. Existing job settings and protected native queue identity can never be changed by this editor.</p>",
         printer.revision
+    );
+    let _ = write!(
+        body,
+        "<p><a href=\"/admin/printers/{}/recipes\">Manage complete named print recipes</a></p>",
+        Escape(&name)
     );
     let mut editable = match toml::Table::try_from(printer.profile.settings()) {
         Ok(value) => value,
@@ -519,7 +563,12 @@ pub struct ProfileForm {
     default_color_mode: String,
     default_sides: String,
 }
-fn csrf_valid(app: &App, principal: &Principal, headers: &HeaderMap, token: &str) -> bool {
+pub(crate) fn csrf_valid(
+    app: &App,
+    principal: &Principal,
+    headers: &HeaderMap,
+    token: &str,
+) -> bool {
     if !principal.authenticated || !app.auth.verify_csrf(principal, token) {
         return false;
     }
@@ -586,11 +635,32 @@ pub async fn save_profile(
         Ok(value) => value,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
     };
-    let Some(entry) = app.printers.get(&name) else {
+    apply_settings(
+        &app,
+        &principal,
+        &name,
+        form.revision,
+        settings,
+        form.intent == "save",
+    )
+    .await
+}
+pub(crate) async fn apply_settings(
+    app: &App,
+    principal: &Principal,
+    name: &str,
+    revision: u64,
+    settings: ProfileSettings,
+    save: bool,
+) -> Response {
+    if !principal.is_admin() || !app.auth.current(principal) {
+        return error(StatusCode::FORBIDDEN, "Current administrator required");
+    }
+    let Some(entry) = app.printer(name) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let mut printer = entry.write().await;
-    if printer.revision != form.revision {
+    if printer.revision != revision {
         return error(
             StatusCode::CONFLICT,
             "Profile changed; reload before editing",
@@ -616,7 +686,7 @@ pub async fn save_profile(
         Ok(value) => value,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
     };
-    if form.intent == "validate" {
+    if !save {
         let mut body = page("Profile validated; not saved");
         let _ = write!(
             body,
@@ -624,11 +694,26 @@ pub async fn save_profile(
             Escape(
                 &serde_json::to_string_pretty(&profile.capabilities().defaults).unwrap_or_default()
             ),
-            Escape(&name)
+            Escape(name)
+        );
+        let recipes = match serde_json::to_string_pretty(profile.recipes()) {
+            Ok(recipes) => recipes,
+            Err(_) => {
+                return error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Cannot serialize recipe preview",
+                );
+            }
+        };
+        let _ = write!(
+            body,
+            "<h2>Complete resolved recipes</h2><pre>{}</pre><p><a href=\"/admin/printers/{}/recipes\">Return to recipe editor</a></p>",
+            Escape(&recipes),
+            Escape(name)
         );
         return finish(body).into_response();
     }
-    match app.engine.active_count(&name).await {
+    match app.engine.active_count(name).await {
         Ok(0) => {}
         Ok(_) => {
             return error(
@@ -647,7 +732,7 @@ pub async fn save_profile(
         Ok(value) => value,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
     };
-    let staged = match StagedFile::new(&app.config.profile_path(&name), contents.as_bytes()) {
+    let staged = match StagedFile::new(&app.config.profile_path(name), contents.as_bytes()) {
         Ok(value) => value,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
@@ -661,7 +746,10 @@ pub async fn save_profile(
         Ok(value) => value,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
-    let durability = match staged.install() {
+    let durability = match app
+        .auth
+        .with_access(principal, Some(name), true, || staged.install())
+    {
         Ok(value) => value,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
@@ -671,8 +759,7 @@ pub async fn save_profile(
     printer.pwg_types = status.pwg_types;
     printer.revision += 1;
     printer.config_change_time = config_change_time;
-    app.profile_changes
-        .send_modify(|revision| *revision = revision.wrapping_add(1));
+    app.configuration_changed();
     if durability.is_err() {
         return error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -696,7 +783,9 @@ pub async fn job_api(
     Path(id): Path<i32>,
 ) -> Response {
     match app.engine.get_job(id).await {
-        Ok(Some(job)) if principal.can_access(&job.owner) => Json(job).into_response(),
+        Ok(Some(job)) if app.auth.can_access(&principal, &job.printer, &job.owner) => {
+            Json(job).into_response()
+        }
         Ok(Some(_)) => StatusCode::FORBIDDEN.into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -724,23 +813,29 @@ pub async fn cancel_job(
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    if !principal.can_access(&job.owner) {
+    if !app.auth.can_access(&principal, &job.printer, &job.owner) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    match app.engine.cancel_job(id, &job.owner).await {
+    match app.engine.cancel_job(id, &principal).await {
         Ok(_) => Redirect::to("/").into_response(),
         Err(e) => error(StatusCode::CONFLICT, e),
     }
 }
 pub async fn printers_api(
     State(app): State<Arc<App>>,
-    Extension(_principal): Extension<Principal>,
+    Extension(principal): Extension<Principal>,
 ) -> Response {
-    let mut printers = Vec::with_capacity(app.printers.len());
-    for (name, entry) in &app.printers {
+    let mut printers = Vec::new();
+    for (name, entry) in app.printer_snapshot() {
+        if !app.auth.can_print(&principal, &name) {
+            continue;
+        }
         let printer = entry.read().await;
         let status = printer.upstream.inspect().await.ok();
-        printers.push(serde_json::json!({"name":name,"display_name":printer.config.display_name,"revision":printer.revision,"effective_defaults":printer.profile.capabilities().defaults,"upstream_state":status.as_ref().map(|s|s.state),"upstream_accepting":status.as_ref().map(|s|s.accepting),"upstream_reasons":status.as_ref().map(|s|&s.reasons),"telemetry":printer.telemetry.snapshot()}));
+        printers.push(serde_json::json!({"name":name,"display_name":printer.config.display_name,"revision":printer.revision,"effective_defaults":printer.profile.capabilities().defaults,"recipes":printer.profile.recipes(),"upstream_state":status.as_ref().map(|s|s.state),"upstream_accepting":status.as_ref().map(|s|s.accepting),"upstream_reasons":status.as_ref().map(|s|&s.reasons),"telemetry":printer.telemetry.snapshot()}));
+    }
+    if !app.auth.current(&principal) {
+        return StatusCode::FORBIDDEN.into_response();
     }
     Json(printers).into_response()
 }

@@ -415,6 +415,26 @@ fn resolution(r: &Resolution) -> IppValue {
         units: 3,
     }
 }
+// PWG 5100.13-2023 §§6.5.8 and 12.1.2: clients copy the standard
+// Job Template members. There is no job-preset-name request selector.
+fn preset_collection(key: &str, recipe: &ResolvedRecipe) -> Result<IppValue> {
+    let job = &recipe.resolved;
+    collection(vec![
+        ("preset-name", name(key)?),
+        ("preset-category", keyword("site")?),
+        (
+            "media-col",
+            media_collection(&job.media, Some(&job.source), Some(&job.media_type))?,
+        ),
+        ("copies", IppValue::Integer(job.copies)),
+        ("print-quality", IppValue::Enum(job.quality)),
+        ("print-color-mode", keyword(&job.color_mode)?),
+        ("sides", keyword(&job.sides)?),
+        ("orientation-requested", IppValue::Enum(job.orientation)),
+        ("printer-resolution", resolution(&job.resolution)),
+        ("print-scaling", keyword(&job.print_scaling)?),
+    ])
+}
 pub struct PrinterRuntime {
     pub uptime: i32,
     pub config_changed: i32,
@@ -645,6 +665,17 @@ pub fn printer_attributes(
         ),
         ("pdl-override-supported", keyword("not-attempted")?),
     ];
+    if !cap.recipes.is_empty() {
+        attrs.push((
+            "job-presets-supported",
+            IppValue::Array(
+                cap.recipes
+                    .iter()
+                    .map(|(key, recipe)| preset_collection(key, recipe))
+                    .collect::<Result<_>>()?,
+            ),
+        ));
+    }
     let mut media: Vec<_> = cap.media.iter().map(|m| m.name.clone()).collect();
     media.sort();
     media.dedup();

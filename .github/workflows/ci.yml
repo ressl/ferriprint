@@ -14,9 +14,17 @@ env:
 
 jobs:
   rust:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            image: rust:1.99.1-bookworm@sha256:8bf7188ae46ad73b801c8d405eedc13ce63a7852b562885743a56890723549a8
+          - runner: ubuntu-24.04-arm
+            image: rust:1.99.1-bookworm@sha256:32f7944ed00949c44d3944a0a852b3e5ea862a610a38b43ac92a33aa87256b75
+    runs-on: ${{ matrix.runner }}
     container:
-      image: rust:1.99.1-bookworm@sha256:8bf7188ae46ad73b801c8d405eedc13ce63a7852b562885743a56890723549a8
+      image: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +42,10 @@ jobs:
           cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Behavioral and security tests
         run: cargo test --locked --all-targets --all-features
+      - name: Native Linux root migration ownership boundary
+        run: |
+          test "$(id -u)" -eq 0
+          cargo test --locked --test migration root_migration_keeps_bootstrap_root_owned_service_readable_and_not_service_writable -- --ignored
       - name: Dependency inventory and notice proof
         run: |
           cargo metadata --locked --format-version 1 > /tmp/metadata.json
@@ -47,9 +59,17 @@ jobs:
           python3 scripts/extract-source.py target/release/ferriprint /tmp/ferriprint-source.tar.gz
           python3 scripts/verify-source.py "$GITHUB_SHA" /tmp/ferriprint-source.tar.gz
   msrv:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            image: rust:1.88.0-bookworm@sha256:4727898c104ecd2e22d780925832502faee9fe4e70581b8572af081370b315a0
+          - runner: ubuntu-24.04-arm
+            image: rust:1.88.0-bookworm@sha256:8aa70d1416cf5b1cff4b95ec6c57f1c5e4e649a3b53d616a26695cda6fbb46bc
+    runs-on: ${{ matrix.runner }}
     container:
-      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      image: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
       - name: Trust only this container's owned checkout

@@ -10,7 +10,19 @@ configure CUPS queues or bundle proprietary PPDs. Native CUPS and its independen
 installed driver remain the renderer. Ferriprint is AGPL-3.0-only and is not
 certified by Apple, a printer vendor or an IPP certification program.
 
-## Six separately documented capabilities
+**0.3 development:** this checkout uses explicit managed accounts/catalogs and the
+[five-point implementation contract](docs/five-point-implementation.md). It is not
+a newly published release or a hardware-certification claim. Use the documentation
+in the immutable0.2.0 tag for that released executable; migrate explicitly before
+running a0.3 executable against0.2 state.
+
+The five additions are complete named recipes, browser account/password/printer
+rights, a persisted operational webhook outbox, browser onboarding of existing
+trusted CUPS queues, and native Linux amd64/arm64 distribution gates. Actual
+acceptance and missing physical-client/printer prerequisites belong in the
+[compatibility matrix](docs/compatibility.md), not an inferred support list.
+
+## The immutable0.2 baseline
 
 The [six-point implementation plan](docs/six-point-implementation.md) was written
 before implementation and gives each point its own flow, security boundary,
@@ -79,74 +91,97 @@ cargo build --locked --release
 Do not copy the synthetic fixture PPD into a real printer queue. Vendor files and
 TLS/password credentials stay outside this repository and all release assets.
 
-## Configuration: one authoritative profile
+## Configuration: one authority per concern
 
-[`examples/ferriprint.toml`](examples/ferriprint.toml) is the protected bootstrap:
-listener/base URL, state, network/auth policy, immutable printer identity/service
-name, private PPD path, upstream and optional telemetry. Editable native mappings,
-defaults, declared-ready media, formats and resolutions belong **only** in
-`state_dir/profiles/<name>.toml`, illustrated by
-[`examples/profile.toml`](examples/profile.toml). Unknown keys are rejected; there
-is no inline-profile/managed-override precedence or legacy compatibility alias.
+[`examples/ferriprint.toml`](examples/ferriprint.toml) is the protected startup
+configuration: listener/base URL, TLS/network/anonymous policy, private state,
+trusted CUPS servers and optional fixed notification transport. It contains
+**no** `access.users` or `[[printers]]` records in0.3.
 
-To validate the checked-in non-printing example from the source root:
+- `state_dir/access.toml`: private managed accounts, PHCs, enabled/role/printer
+  grants, anonymous grants and permanently reserved usernames.
+- `state_dir/printers.toml`: authoritative installed Ferriprint printer bindings.
+- `state_dir/profiles/<name>.toml`: sole mapping/default/complete-recipe settings,
+  illustrated by [`examples/profile.toml`](examples/profile.toml).
+- Private acquired PPDs remain under the managed state directory; native CUPS and
+  its separately installed vendor driver remain the renderer.
+- `state_dir/jobs.sqlite3`: durable jobs and persisted notification transitions/
+  outbox. No reset, state-copy shortcut or job replay is part of migration.
 
-```sh
-install -d -m 0700 ./var/demo/profiles
-install -m 0600 examples/profile.toml ./var/demo/profiles/demo.toml
-ferriprint --config examples/ferriprint.toml check
-```
-
-For real setup, use the CLI assistant described in the
-[deployment guide](docs/linux-pilot.md#initial-native-queueppd-setup):
+Initialize a **new empty** state directory as its intended owner. Passwords come
+from a hidden terminal or bounded stdin, never an argument:
 
 ```text
-ferriprint setup inspect --queue URI --ppd PATH [--ca-certificate PATH]
-ferriprint setup install --bootstrap PATH --printer NAME [--choices PATH] --output PATH [--confirm]
+ferriprint --config PATH user init --username operator
+ferriprint --config PATH check
+ferriprint --config PATH serve
 ```
 
-The interactive flow guides explicit PPD choices. Noninteractive choices include
-`confirmed_native_mappings = true`, `[settings]` schema_version1 and fully nested
-managed settings plus optional standard job previews; a bare profile is not that
-wrapper. Existing outputs are not silently overwritten. Queue/driver/default
-installation is outside the assistant's scope.
+An empty catalog is legitimate. As the administrator, open the HTTP(S) origin
+corresponding to `public_url`, then `/admin/onboarding`: choose a protected trusted
+CUPS source and an existing queue, inspect the acquired PPD, confirm native
+mappings, set defaults/recipes, review and commit. No per-printer TOML edit, native
+queue creation, driver installation or print submission is required.
+
+The offline CLI uses the same source inventory, validators and catalog commit:
+
+```text
+ferriprint --config PATH setup inventory --source office
+ferriprint --config PATH setup inspect --source office --queue native-queue
+ferriprint --config PATH setup install --source office --queue native-queue --printer office --display-name "Office printer" --service-name "Office printer" --location "Office" --choices APPROVED_CHOICES --confirm
+```
+
+Choices require `confirmed_native_mappings = true`, `[settings]` and its fully
+nested managed settings plus optional `[[previews]]`; a bare profile is not this
+wrapper. Unsupported choices/changed queues or PPDs fail rather than inventing a
+driverless profile. See [setup and migration](docs/linux-pilot.md).
 
 ## Authentication and ownership
 
-`[access]` contains named users with roles `user` or `admin` and protected
-`password_hash_file` paths. Generate Argon2id files with:
+Administrators manage accounts at `/admin/users`: create, suspend/reactivate,
+change role/password and grant/revoke individual printers. Ordinary users change
+their own password at `/account` with current-password verification. Administrators
+have explicit global authority; ordinary users require a current enabled account
+and the printer's grant for status, recipes and every job operation.
+
+Usernames are permanent: there is no delete/rename/reuse operation, including for
+suspended users and imported historical owners. The final enabled administrator
+cannot be suspended/demoted. Revisions/CSRF and current-authority rechecks protect
+concurrent mutations, uploads and not-yet-dispatched jobs. Already dispatched
+upstream work is not falsely claimed canceled by suspending its owner.
+
+The managed access document is owner-only, service-writable private state, not a
+root-owned bootstrap user list or plaintext password file. The0.2 PHC descriptor/
+effective-ACL checks remain mandatory for explicit credential import and optional
+private secret inputs. There is no credential-path exemption or permission
+broadening. See [security](SECURITY.md).
+
+For0.2 state, stop only Ferriprint after the active-job gate, preserve its identity
+and state, then use the explicit import. A stopped systemd unit may no longer have
+its `/run/credentials` mount; provide a protected username-to-persistent-PHC path
+map through `--credential-sources` rather than guessing replacement paths:
 
 ```text
-ferriprint user password-hash --output PATH
+ferriprint --config OLD_CONFIG migrate-0.2 --output NEW_CONFIG --credential-sources PROTECTED_MAP
 ```
 
-Plaintext comes from a hidden terminal or bounded protected stdin, never argv.
-Hash files must be regular, non-symlink and effectively private to root/the service
-UID. Prefer root0600 originals delivered by systemd LoadCredential; Linux may use
-root0440 with a named service-UID read ACL and an owning-group entry with no access.
-Validation checks effective ACL rights, not a credential-path exemption or a
-misleading group-mask bit. See [the security policy](SECURITY.md).
-The username/role bootstrap remains root-owned/read-only. Use separate personal
-`user` credentials for printing and a distinct `admin` credential for management;
-do not distribute the administration login as the everyday printer account.
+Migration refuses existing destinations and preserves historical owners, jobs,
+backend identity and defaults. Runtime rejects legacy bootstrap users/printers;
+it does not retain a second precedence layer. Offline administrator recovery is
+`ferriprint --config PATH user recover-admin --username operator`, under the same
+service-lock/private-state gate, not a browser backdoor.
 
-Optional `anonymous_trusted_lan` requires explicit `anonymous_clients` contained by
-`allowed_clients` and a stable `anonymous_owner`. This permits one existing source
-to retain shared anonymous printing while other reviewed clients must authenticate
-for job/web operations, **including Validate-Job**. Wrong supplied credentials
-always fail401, including at an anonymous-allowed IP.
-Anonymous users deliberately share visibility/cancellation; this is not per-person
-isolation. Preserve the previous owner string when retaining its durable jobs.
+Optional `anonymous_trusted_lan` still requires explicit contained
+`anonymous_clients` and a stable `anonymous_owner`;0.3 additionally requires an
+explicit managed anonymous grant for the printer. This is one shared principal,
+not per-person isolation. Network admission is never an account/admin grant.
 
-Within the existing network/TLS boundary, capability-only IPP
-Get-Printer-Attributes and the corresponding-source offer `/source` can be read
-without a credential so native clients can discover the authentication policy.
-This grants no job access, validation, submission, cancellation or administration.
-Invalid supplied credentials still fail401 rather than entering this public
-metadata path. Printer authentication attributes describe the **request source**:
-credential-required sources see Basic/username+password; explicitly anonymous
-sources retain none. Mixed-client discovery must not force authentication onto a
-deliberately preserved anonymous client.
+Inside the configured network/TLS boundary, capability-only
+Get-Printer-Attributes and `/source` remain credential-free exceptions, without
+job data. All job operations including Validate-Job require current authority;
+known authenticated users without a printer grant are denied, not downgraded to
+anonymous. Invalid supplied credentials always fail401, even on capability/source
+requests or an anonymous-eligible address.
 
 These ownership rules protect requests through Ferriprint, not a separately
 reachable native CUPS queue, physical device or other print path. Operators who
@@ -183,6 +218,23 @@ ferriprint --config PATH abandon JOB_ID --acknowledge-possible-upstream-job
   Validate previews through the shared PPD resolver; Save atomically persists and
   activates the sole profile. Stale revisions or any active/held/uncertain job
   block a save. Existing jobs retain immutable resolved settings/backend identity.
+- `/admin/printers/<name>/recipes` edits complete named tickets, including numeric
+  media/margins, source/material/quality/color/sides, copies/orientation, input
+  resolution and scaling. Validate before save; no recipe field silently inherits
+  later defaults. Standard `job-presets-supported` exposes complete job templates.
+  Clients must copy the selected preset's attributes: there is no invented
+  `job-preset-name` request selector or universal native-dialog visibility claim.
+  Authorized users can export a resolved recipe from
+  `/api/printers/<name>/recipes/<key>`; explicit supported overrides win.
+- `/admin/onboarding` acquires queues/PPDs only from configured trusted CUPS
+  origins. Saved/HTTP-active is distinct from discovery pending/published/failed;
+  no success page claims advertising before actual scoped registration.
+- `/admin/notifications` enables per-printer transition alerts, sends a real
+  diagnostic to the fixed protected destination, and shows durable delivery/
+  retry evidence. Failed/stopped jobs, source outages and reported paper shortage
+  produce privacy-minimal events plus observed recoveries. Unknown/stale readings
+  do not prove empty paper or recovery. HTTP2xx is acknowledgement, not proof a
+  person read a message; receivers must deduplicate stable event IDs.
 - `/api/printers` and the browser identify telemetry source and freshness. A native
   queue's cached marker values or media-ready do not prove physical sampling or
   loaded paper. Missing trays/supplies are unknown, not fabricated zeros. Profile

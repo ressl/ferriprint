@@ -1,7 +1,7 @@
 # Ferriprint CI: formatting, linting, tests, MSRV check, dependency audit and
 # secret scan. Self-contained; no internal endpoints or credentials are
-# referenced. Public releases are gated additionally by the GitHub package
-# install/remove and versioned-publication workflow.
+# referenced. Public releases additionally use the sole GitHub publisher's native
+# amd64/arm64 quality, Debian/Ubuntu package/tar/runtime and exact-source gates.
 
 stages:
   - validate

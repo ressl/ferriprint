@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Robert Ressl
-# Local non-printing receiver bootstrap. Setup installs the authoritative settings
-# from examples/profile.toml into state_dir/profiles/demo.toml.
+# Isolated NONPRINTING receiver. Initialize an administrator via password stdin:
+# ferriprint --config examples/ferriprint.toml user init --username operator
+# Then use the browser onboarding wizard or the explicit setup install command.
+# Accounts/ACLs: state_dir/access.toml. Printer bindings: state_dir/printers.toml.
+# No per-printer bootstrap TOML or web-editable backend/path authority exists.
 listen = "127.0.0.1:8631"
-public_url = "ipp://localhost:8631/"
+public_url = "ipp://127.0.0.1:8631/"
 state_dir = "../var/demo"
 max_document_bytes = 134217728
 max_attribute_bytes = 262144
@@ -12,29 +15,24 @@ poll_interval_ms = 1000
 backend_timeout_secs = 30
 
 [access]
-anonymous_trusted_lan = true
-anonymous_owner = "anonymous"
-anonymous_clients = ["127.0.0.0/8", "::1/128"]
-# To enable authenticated browser administration, provision a private hash with
-# ferriprint user password-hash --output /protected/path/admin.argon2
-# [[access.users]]
-# username = "operator"
-# role = "admin"
-# password_hash_file = "/protected/path/admin.argon2"
+anonymous_trusted_lan = false
+# If deliberately enabled, specify anonymous_owner/anonymous_clients and grant
+# each printer explicitly through authenticated administration (default: none).
 
-[[printers]]
-name = "demo"
-display_name = "Ferriprint Demonstrator"
-service_name = "Ferriprint Demonstrator"
-location = "Local test receiver: never a physical printer"
-ppd = "../tests/fixtures/native.ppd"
-upstream_uri = "ipp://127.0.0.1:18631/printers/receiver"
-upstream_username = "ferriprint"
-# Optional explicit Linux Avahi scope for a real TLS FQDN (not this loopback demo):
+[[cups_sources]]
+id = "local"
+server_uri = "ipp://127.0.0.1:18631/"
+username = "ferriprint"
+# Remote sources require IPPS and normal system TLS trust (or protected CA path).
+# No browser form accepts an arbitrary server, credential path or device URI.
+
+# Optional real delivery to an operator-controlled HTTPS JSON webhook:
+# [notifications]
+# webhook_url = "https://notify.example.test/ferriprint"
+# bearer_secret_file = "/etc/ferriprint/webhook.token"
+# Enable events per printer and use an actual diagnostic delivery in the browser.
+
+# Scoped Linux discovery for a real TLS FQDN, not this loopback receiver:
 # [discovery]
 # interface = "eth0"
 # protocol = "ipv4"
-# Native queue reports are not necessarily fresh physical sensor readings:
-# [printers.telemetry]
-# uri = "ipps://print.example.test:631/printers/existing"
-# source = "native-cups-ipp"

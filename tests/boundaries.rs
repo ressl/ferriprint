@@ -616,8 +616,11 @@ async fn native_defaults_validate_constraints_without_overriding_selected_resolu
         ..Default::default()
     };
     assert!(
-        front.app.printers["demo"]
-            .read()
+        front
+            .app
+            .printer("demo")
+            .unwrap()
+            .read_owned()
             .await
             .profile
             .resolve(&request, "application/pdf")

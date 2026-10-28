@@ -9,7 +9,7 @@ use ferriprint::{
 };
 use futures_util::TryStreamExt;
 use ipp::prelude::*;
-use std::{io::Cursor, sync::atomic::Ordering, time::Duration};
+use std::{io::Cursor, sync::atomic::Ordering};
 use support::*;
 const OP: DelimiterTag = DelimiterTag::OperationAttributes;
 const JOB: DelimiterTag = DelimiterTag::JobAttributes;
@@ -81,7 +81,7 @@ async fn capabilities_numeric_media_quality_and_no_cups_identity() {
     } else {
         false
     }));
-    let printer = front.app.printers["demo"].read().await;
+    let printer = front.app.printer("demo").unwrap().read_owned().await;
     let profile = &printer.profile;
     let resolved = profile.resolve(&borderless(), "application/pdf").unwrap();
     assert_eq!(resolved.options["PageSize"], "TA3");
@@ -167,8 +167,11 @@ async fn print_is_processing_until_real_upstream_completion_and_cancel_uses_remo
     let cfg = config(dir.path(), &receiver.uri(), 0);
     let front = Frontend::start(cfg).await;
     let mut request = front.request(Operation::PrintJob, None);
-    let resolved = front.app.printers["demo"]
-        .read()
+    let resolved = front
+        .app
+        .printer("demo")
+        .unwrap()
+        .read_owned()
         .await
         .profile
         .resolve(&borderless(), "application/pdf")
@@ -333,23 +336,55 @@ async fn durable_ids_admission_owner_query_and_cancel_during_upload() {
     cfg.max_document_bytes = 100;
     let engine = JobEngine::open(&cfg).await.unwrap();
     let job = engine
-        .create_job("demo", "alice", "one", "application/pdf", resolve(&cfg))
+        .create_job(
+            "demo",
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+            "one",
+            "application/pdf",
+            resolve(&cfg),
+        )
         .await
         .unwrap();
     assert!(
         engine
-            .create_job("demo", "alice", "full", "application/pdf", resolve(&cfg))
+            .create_job(
+                "demo",
+                &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+                "full",
+                "application/pdf",
+                resolve(&cfg)
+            )
             .await
             .is_err()
     );
-    assert!(engine.cancel_job(job.id, "mallory").await.is_err());
+    assert!(
+        engine
+            .cancel_job(
+                job.id,
+                &support::principal(&engine, "mallory", support::FIXTURE_PASSWORD).await
+            )
+            .await
+            .is_err()
+    );
     let (mut writer, reader) = tokio::io::duplex(8);
     let e = engine.clone();
-    let upload = tokio::spawn(async move { e.ingest_document(job.id, "alice", reader).await });
+    let uploading_principal = support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await;
+    let upload = tokio::spawn(async move {
+        e.ingest_document(job.id, &uploading_principal, reader)
+            .await
+    });
     use tokio::io::AsyncWriteExt;
-    writer.write_all(b"part").await.unwrap();
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    engine.cancel_job(job.id, "alice").await.unwrap();
+    writer
+        .write_all(b"partial document beyond buffer capacity")
+        .await
+        .unwrap();
+    engine
+        .cancel_job(
+            job.id,
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+        )
+        .await
+        .unwrap();
     drop(writer);
     assert!(upload.await.unwrap().is_err());
     assert_eq!(engine.get_job(job.id).await.unwrap().unwrap().state, 7);
@@ -358,7 +393,13 @@ async fn durable_ids_admission_owner_query_and_cancel_during_upload() {
     let engine = JobEngine::open(&cfg).await.unwrap();
     assert_eq!(engine.time_origin(), origin);
     let next = engine
-        .create_job("demo", "bob", "two", "application/pdf", resolve(&cfg))
+        .create_job(
+            "demo",
+            &support::principal(&engine, "bob", support::FIXTURE_PASSWORD).await,
+            "two",
+            "application/pdf",
+            resolve(&cfg),
+        )
         .await
         .unwrap();
     assert!(next.id > job.id);
@@ -372,7 +413,11 @@ async fn durable_ids_admission_owner_query_and_cancel_during_upload() {
     );
     assert!(
         engine
-            .ingest_document(next.id, "bob", Cursor::new(vec![0; 101]))
+            .ingest_document(
+                next.id,
+                &support::principal(&engine, "bob", support::FIXTURE_PASSWORD).await,
+                Cursor::new(vec![0; 101])
+            )
             .await
             .is_err()
     );
@@ -389,7 +434,7 @@ async fn explicit_rejection_aborts_but_timeout_never_resubmits_and_can_be_abando
     let job = engine
         .create_job(
             "demo",
-            "anonymous",
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
             "reject",
             "application/pdf",
             resolve(&cfg),
@@ -397,7 +442,11 @@ async fn explicit_rejection_aborts_but_timeout_never_resubmits_and_can_be_abando
         .await
         .unwrap();
     engine
-        .ingest_document(job.id, "anonymous", Cursor::new(b"document"))
+        .ingest_document(
+            job.id,
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
+            Cursor::new(b"document"),
+        )
         .await
         .unwrap();
     engine.tick().await.unwrap();
@@ -408,7 +457,7 @@ async fn explicit_rejection_aborts_but_timeout_never_resubmits_and_can_be_abando
     let uncertain = engine
         .create_job(
             "demo",
-            "anonymous",
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
             "timeout",
             "application/pdf",
             resolve(&cfg),
@@ -416,7 +465,11 @@ async fn explicit_rejection_aborts_but_timeout_never_resubmits_and_can_be_abando
         .await
         .unwrap();
     engine
-        .ingest_document(uncertain.id, "anonymous", Cursor::new(b"document"))
+        .ingest_document(
+            uncertain.id,
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
+            Cursor::new(b"document"),
+        )
         .await
         .unwrap();
     engine.tick().await.unwrap();
@@ -439,7 +492,7 @@ async fn explicit_rejection_aborts_but_timeout_never_resubmits_and_can_be_abando
     assert_eq!(receiver.device.attempts.load(Ordering::SeqCst), 2);
     assert!(
         engine
-            .cancel_job(uncertain.id, "anonymous")
+            .cancel_job(uncertain.id, &engine.auth.anonymous().unwrap())
             .await
             .unwrap_err()
             .to_string()
@@ -459,17 +512,37 @@ async fn cancel_while_submitting_is_forwarded_after_remote_identity_arrives() {
     cfg.backend_timeout_secs = 5;
     let engine = JobEngine::open(&cfg).await.unwrap();
     let job = engine
-        .create_job("demo", "alice", "race", "application/pdf", resolve(&cfg))
+        .create_job(
+            "demo",
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+            "race",
+            "application/pdf",
+            resolve(&cfg),
+        )
         .await
         .unwrap();
     engine
-        .ingest_document(job.id, "alice", Cursor::new(b"document"))
+        .ingest_document(
+            job.id,
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+            Cursor::new(b"document"),
+        )
         .await
         .unwrap();
     let e = engine.clone();
     let tick = tokio::spawn(async move { e.tick().await });
     receiver.device.accepted.notified().await;
-    assert_eq!(engine.cancel_job(job.id, "alice").await.unwrap().state, 6);
+    assert_eq!(
+        engine
+            .cancel_job(
+                job.id,
+                &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await
+            )
+            .await
+            .unwrap()
+            .state,
+        6
+    );
     receiver.device.gate.notify_one();
     tick.await.unwrap().unwrap();
     assert_eq!(*receiver.device.cancellations.lock(), [700]);
@@ -486,7 +559,7 @@ async fn crash_during_submission_stops_without_duplicate_and_known_jobs_reconcil
     let job = engine
         .create_job(
             "demo",
-            "anonymous",
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
             "crash",
             "application/pdf",
             resolve(&cfg),
@@ -494,7 +567,11 @@ async fn crash_during_submission_stops_without_duplicate_and_known_jobs_reconcil
         .await
         .unwrap();
     engine
-        .ingest_document(job.id, "anonymous", Cursor::new(b"document"))
+        .ingest_document(
+            job.id,
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
+            Cursor::new(b"document"),
+        )
         .await
         .unwrap();
     let e = engine.clone();
@@ -514,7 +591,7 @@ async fn crash_during_submission_stops_without_duplicate_and_known_jobs_reconcil
     let second = engine
         .create_job(
             "demo",
-            "anonymous",
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
             "known",
             "application/pdf",
             resolve(&cfg),
@@ -522,7 +599,11 @@ async fn crash_during_submission_stops_without_duplicate_and_known_jobs_reconcil
         .await
         .unwrap();
     engine
-        .ingest_document(second.id, "anonymous", Cursor::new(b"document"))
+        .ingest_document(
+            second.id,
+            &support::principal(&engine, "anonymous", support::FIXTURE_PASSWORD).await,
+            Cursor::new(b"document"),
+        )
         .await
         .unwrap();
     engine.tick().await.unwrap();
@@ -540,15 +621,27 @@ async fn dropped_upload_aborts_and_restart_removes_orphan_payloads() {
     let cfg = config(dir.path(), &receiver.uri(), 0);
     let engine = JobEngine::open(&cfg).await.unwrap();
     let job = engine
-        .create_job("demo", "alice", "upload", "application/pdf", resolve(&cfg))
+        .create_job(
+            "demo",
+            &support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await,
+            "upload",
+            "application/pdf",
+            resolve(&cfg),
+        )
         .await
         .unwrap();
     let (mut writer, reader) = tokio::io::duplex(8);
     let e = engine.clone();
-    let upload = tokio::spawn(async move { e.ingest_document(job.id, "alice", reader).await });
+    let uploading_principal = support::principal(&engine, "alice", support::FIXTURE_PASSWORD).await;
+    let upload = tokio::spawn(async move {
+        e.ingest_document(job.id, &uploading_principal, reader)
+            .await
+    });
     use tokio::io::AsyncWriteExt;
-    writer.write_all(b"part").await.unwrap();
-    tokio::time::sleep(Duration::from_millis(20)).await;
+    writer
+        .write_all(b"partial document beyond buffer capacity")
+        .await
+        .unwrap();
     upload.abort();
     let _ = upload.await;
     assert_eq!(engine.get_job(job.id).await.unwrap().unwrap().state, 8);
@@ -653,5 +746,15 @@ async fn authenticated_principal_cannot_be_spoofed_by_requesting_user_name() {
         .unwrap()
         .unwrap();
     assert_eq!(job.owner, "operator");
-    assert!(front.app.engine.cancel_job(job.id, "victim").await.is_err());
+    assert!(
+        front
+            .app
+            .engine
+            .cancel_job(
+                job.id,
+                &support::principal(&front.app.engine, "mallory", support::FIXTURE_PASSWORD).await
+            )
+            .await
+            .is_err()
+    );
 }

@@ -35,6 +35,11 @@ pub struct Config {
     pub allowed_clients: Vec<IpNet>,
     pub tls: Option<TlsConfig>,
     pub access: AccessConfig,
+    #[serde(default)]
+    pub cups_sources: Vec<crate::setup::CupsSource>,
+    pub notifications: Option<crate::notifications::NotificationConfig>,
+    /// Startup snapshot loaded only from the authoritative managed catalog.
+    #[serde(skip)]
     pub printers: Vec<PrinterConfig>,
 }
 
@@ -62,22 +67,12 @@ pub enum Role {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct UserConfig {
-    pub username: String,
-    pub role: Role,
-    pub password_hash_file: PathBuf,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct AccessConfig {
     #[serde(default)]
     pub anonymous_trusted_lan: bool,
     pub anonymous_owner: Option<String>,
     #[serde(default)]
     pub anonymous_clients: Vec<IpNet>,
-    #[serde(default)]
-    pub users: Vec<UserConfig>,
 }
 
 /// Protected bootstrap identity. No web-editable paths, credentials or queue URIs.
@@ -158,6 +153,8 @@ pub struct ProfileSettings {
     pub color_modes: BTreeMap<String, DriverOptions>,
     pub sides: BTreeMap<String, DriverOptions>,
     pub defaults: Defaults,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub recipes: BTreeMap<String, crate::recipes::Recipe>,
     #[serde(default)]
     pub declared_ready: Vec<ReadyMediaConfig>,
     #[serde(default = "default_document_formats")]
@@ -242,26 +239,42 @@ pub struct ReadyMediaConfig {
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
+        let mut config = Self::load_bootstrap(path)?;
+        config.printers = crate::managed::load_catalog(&config)?.printers;
+        config.validate()?;
+        Ok(config)
+    }
+    /// Explicit initialization only: parse protected settings without inventing a catalog.
+    pub fn load_bootstrap(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("read configuration {}", path.display()))?;
-        let mut config: Self = toml::from_str(&text).context("parse configuration")?;
-        let base = path.parent().unwrap_or_else(|| Path::new("."));
+        let table: toml::Table = toml::from_str(&text).context("parse configuration")?;
+        ensure!(
+            !table.contains_key("printers")
+                && !table
+                    .get("access")
+                    .and_then(toml::Value::as_table)
+                    .is_some_and(|access| access.contains_key("users")),
+            "legacy bootstrap users/printers require the explicit migrate-0.2 command"
+        );
+        let mut config: Self = table.try_into().context("parse configuration")?;
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        let directory = if parent.is_absolute() {
+            parent.to_owned()
+        } else {
+            std::env::current_dir()?.join(parent)
+        };
+        let base = directory.as_path();
         config.state_dir = absolute_from(base, &config.state_dir);
         if let Some(tls) = &mut config.tls {
             tls.certificate = absolute_from(base, &tls.certificate);
             tls.private_key = absolute_from(base, &tls.private_key);
         }
-        for user in &mut config.access.users {
-            user.password_hash_file = absolute_from(base, &user.password_hash_file);
+        for source in &mut config.cups_sources {
+            source.resolve_paths(base);
         }
-        for printer in &mut config.printers {
-            printer.ppd = absolute_from(base, &printer.ppd);
-            if let Some(ca) = &mut printer.upstream_ca_certificate {
-                *ca = absolute_from(base, ca);
-            }
-            if let Some(telemetry) = &mut printer.telemetry {
-                telemetry.resolve_paths(base);
-            }
+        if let Some(notifications) = &mut config.notifications {
+            notifications.resolve_paths(base);
         }
         config.validate()?;
         Ok(config)
@@ -304,7 +317,6 @@ impl Config {
                 && self.backend_timeout_secs <= 300,
             "invalid polling interval or backend timeout"
         );
-        ensure!(!self.printers.is_empty(), "configure at least one printer");
         if !self.listen.ip().is_loopback() {
             ensure!(
                 !self.allowed_clients.is_empty(),
@@ -316,25 +328,12 @@ impl Config {
             discovery.validate()?;
         }
         let access = &self.access;
-        ensure!(access.users.len() <= 64, "at most 64 users are supported");
-        let mut users = std::collections::HashSet::new();
-        for user in &access.users {
-            validate_principal(&user.username)?;
-            ensure!(
-                users.insert(user.username.as_str()),
-                "duplicate authentication username"
-            );
-        }
         if access.anonymous_trusted_lan {
             let owner = access
                 .anonymous_owner
                 .as_deref()
                 .context("anonymous_trusted_lan requires explicit anonymous_owner")?;
             validate_principal(owner)?;
-            ensure!(
-                !users.contains(owner),
-                "anonymous_owner cannot equal an authenticated username"
-            );
             ensure!(
                 !access.anonymous_clients.is_empty(),
                 "anonymous_trusted_lan requires explicit anonymous_clients networks"
@@ -355,21 +354,9 @@ impl Config {
                 "anonymous settings require anonymous_trusted_lan=true"
             );
         }
-        ensure!(
-            access.anonymous_trusted_lan || !access.users.is_empty(),
-            "configure authenticated users or deliberate anonymous trusted-LAN access"
-        );
         let mut names = std::collections::HashSet::new();
         for printer in &self.printers {
-            ensure!(
-                !printer.name.is_empty()
-                    && printer.name.len() <= 63
-                    && printer
-                        .name
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
-                "printer name must contain 1..63 ASCII letters, digits, underscores or hyphens"
-            );
+            validate_printer_name(&printer.name)?;
             ensure!(
                 names.insert(&printer.name),
                 "duplicate printer name {}",
@@ -392,6 +379,17 @@ impl Config {
                 telemetry.validate()?;
             }
         }
+        let mut source_ids = std::collections::HashSet::new();
+        for source in &self.cups_sources {
+            source.validate()?;
+            ensure!(
+                source_ids.insert(&source.id),
+                "duplicate trusted CUPS source"
+            );
+        }
+        if let Some(notifications) = &self.notifications {
+            notifications.validate()?;
+        }
         Ok(())
     }
     pub fn printer_uri(&self, name: &str) -> String {
@@ -402,6 +400,17 @@ impl Config {
     }
 }
 
+pub fn validate_printer_name(value: &str) -> Result<()> {
+    ensure!(
+        !value.is_empty()
+            && value.len() <= 63
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_')),
+        "printer name must contain 1..63 ASCII letters, digits, underscores or hyphens"
+    );
+    Ok(())
+}
 pub fn validate_principal(value: &str) -> Result<()> {
     ensure!(
         !value.is_empty()

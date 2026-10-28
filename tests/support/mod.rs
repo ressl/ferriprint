@@ -7,7 +7,7 @@ use axum::{
     body::Body,
     extract::{Request, State},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
 };
 use ferriprint::{config::Config, wire::*};
 use futures_util::TryStreamExt;
@@ -18,14 +18,14 @@ use std::{
     net::SocketAddr,
     sync::{
         Arc,
-        atomic::{AtomicU8, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
     },
     time::Duration,
 };
 use tokio::{io::AsyncReadExt, sync::Notify};
 use tokio_util::io::StreamReader;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Received {
     pub id: i32,
     pub state: i32,
@@ -35,6 +35,9 @@ pub struct Received {
     pub bytes: u64,
     pub owner: String,
     pub resolution: Option<(i32, i32)>,
+    pub copies: i32,
+    pub orientation: i32,
+    pub print_scaling: Option<String>,
 }
 pub struct Device {
     pub jobs: Mutex<Vec<Received>>,
@@ -45,6 +48,11 @@ pub struct Device {
     pub accepted: Notify,
     pub gate: Notify,
     pub formats: Vec<String>,
+    pub uri: String,
+    pub ppd: Mutex<Vec<u8>>,
+    pub inventory_uri: Mutex<Option<String>>,
+    pub paper_empty: AtomicBool,
+    pub unavailable: AtomicBool,
 }
 pub struct Receiver {
     pub address: SocketAddr,
@@ -74,6 +82,11 @@ impl Receiver {
             mode: AtomicU8::new(0),
             accepted: Notify::new(),
             gate: Notify::new(),
+            uri: format!("ipp://{address}/printers/receiver"),
+            ppd: Mutex::new(include_bytes!("../fixtures/native.ppd").to_vec()),
+            inventory_uri: Mutex::new(None),
+            paper_empty: AtomicBool::new(false),
+            unavailable: AtomicBool::new(false),
             formats: vec![
                 "application/pdf".into(),
                 "image/jpeg".into(),
@@ -83,6 +96,9 @@ impl Receiver {
             ],
         });
         let router = Router::new()
+            .route("/", post(receive))
+            .route("/printers/receiver.ppd", get(ppd))
+            .route("/received", get(received))
             .route("/printers/receiver", post(receive))
             .with_state(device.clone());
         let task = tokio::spawn(async move {
@@ -107,7 +123,23 @@ impl Receiver {
             .state = 9;
     }
 }
-async fn receive(State(device): State<Arc<Device>>, request: Request) -> impl IntoResponse {
+async fn received(State(device): State<Arc<Device>>) -> axum::Json<Vec<Received>> {
+    axum::Json(device.jobs.lock().clone())
+}
+async fn ppd(State(device): State<Arc<Device>>) -> axum::response::Response {
+    if device.unavailable.load(Ordering::SeqCst) {
+        return axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    (
+        [("content-type", "application/vnd.cups-ppd")],
+        device.ppd.lock().clone(),
+    )
+        .into_response()
+}
+async fn receive(State(device): State<Arc<Device>>, request: Request) -> axum::response::Response {
+    if device.unavailable.load(Ordering::SeqCst) {
+        return axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
     let mut reader = StreamReader::new(
         request
             .into_body()
@@ -124,11 +156,45 @@ async fn receive(State(device): State<Arc<Device>>, request: Request) -> impl In
     let op = DelimiterTag::OperationAttributes;
     let job_group = DelimiterTag::JobAttributes;
     match request.header().operation_or_status {
+        0x4002 => {
+            for (key, value) in [
+                ("printer-name", name("receiver").unwrap()),
+                (
+                    "printer-uri-supported",
+                    uri(device
+                        .inventory_uri
+                        .lock()
+                        .as_deref()
+                        .unwrap_or(&device.uri))
+                    .unwrap(),
+                ),
+                (
+                    "printer-info",
+                    text("Synthetic nonprinting CUPS queue").unwrap(),
+                ),
+                (
+                    "printer-make-and-model",
+                    text("Synthetic native fixture").unwrap(),
+                ),
+                ("printer-state", IppValue::Enum(3)),
+                ("printer-is-accepting-jobs", IppValue::Boolean(true)),
+            ] {
+                add(&mut response, DelimiterTag::PrinterAttributes, key, value).unwrap();
+            }
+        }
         11 => {
             for (k, v) in [
                 ("printer-state", IppValue::Enum(3)),
                 ("printer-is-accepting-jobs", IppValue::Boolean(true)),
-                ("printer-state-reasons", keyword("none").unwrap()),
+                (
+                    "printer-state-reasons",
+                    keyword(if device.paper_empty.load(Ordering::SeqCst) {
+                        "media-empty-error"
+                    } else {
+                        "none"
+                    })
+                    .unwrap(),
+                ),
                 (
                     "document-format-supported",
                     strings(
@@ -206,6 +272,15 @@ async fn receive(State(device): State<Arc<Device>>, request: Request) -> impl In
                         id,
                         state: 5,
                         options,
+                        copies: attr(&request, job_group, "copies")
+                            .and_then(integer)
+                            .unwrap_or(1),
+                        orientation: attr(&request, job_group, "orientation-requested")
+                            .and_then(integer)
+                            .unwrap_or(3),
+                        print_scaling: attr(&request, job_group, "print-scaling")
+                            .and_then(str_value)
+                            .map(str::to_owned),
                         format: attr(&request, op, "document-format")
                             .and_then(str_value)
                             .unwrap()
@@ -267,6 +342,7 @@ async fn receive(State(device): State<Arc<Device>>, request: Request) -> impl In
         [("content-type", "application/ipp")],
         Body::from(response.to_bytes()),
     )
+        .into_response()
 }
 fn remote_attributes(response: &mut IppRequestResponse, id: i32, state: i32) {
     for (k, v) in [
@@ -299,18 +375,82 @@ fn remote_attributes(response: &mut IppRequestResponse, id: i32, state: i32) {
         add(response, DelimiterTag::JobAttributes, k, v).unwrap();
     }
 }
+pub const FIXTURE_ADMIN: &str = "fixture-admin";
+pub const FIXTURE_PASSWORD: &str = "isolated-admin-fixture-password";
 pub fn config(directory: &std::path::Path, upstream: &str, port: u16) -> Config {
-    let text = include_str!("../../examples/ferriprint.toml");
-    let mut config: Config = toml::from_str(text).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    let mut config: Config =
+        toml::from_str(include_str!("../../examples/ferriprint.toml")).unwrap();
     config.state_dir = directory.to_owned();
     config.public_url = format!("ipp://127.0.0.1:{port}/").parse().unwrap();
     config.listen = format!("127.0.0.1:{port}").parse().unwrap();
     config.backend_timeout_secs = 1;
     config.poll_interval_ms = 100;
-    config.printers[0].ppd =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native.ppd");
-    config.printers[0].upstream_uri = upstream.parse().unwrap();
+    config.access.anonymous_trusted_lan = true;
+    config.access.anonymous_owner = Some("anonymous".into());
+    config.access.anonymous_clients =
+        vec!["127.0.0.0/8".parse().unwrap(), "::1/128".parse().unwrap()];
+    config.printers = vec![ferriprint::config::PrinterConfig {
+        name: "demo".into(),
+        display_name: "Ferriprint Demonstrator".into(),
+        service_name: "Ferriprint Demonstrator".into(),
+        location: "Synthetic NONPRINTING receiver".into(),
+        ppd: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native.ppd"),
+        upstream_uri: upstream.parse().unwrap(),
+        upstream_username: "ferriprint".into(),
+        upstream_auth: None,
+        upstream_ca_certificate: None,
+        telemetry: None,
+    }];
+    let mut server = config.printers[0].upstream_uri.clone();
+    server.set_path("/");
+    config.cups_sources[0].server_uri = server;
+    std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+    if !directory.join("access.toml").exists() {
+        ferriprint::managed::initialize(
+            &config,
+            FIXTURE_ADMIN,
+            ferriprint::auth::password_hash(FIXTURE_PASSWORD.as_bytes()).unwrap(),
+        )
+        .unwrap();
+        let mut access: ferriprint::auth::AccessState =
+            toml::from_str(&std::fs::read_to_string(directory.join("access.toml")).unwrap())
+                .unwrap();
+        access.anonymous_printers.insert("demo".into());
+        for name in ["alice", "bob", "mallory"] {
+            access.accounts.insert(
+                name.into(),
+                ferriprint::auth::Account {
+                    role: ferriprint::config::Role::User,
+                    enabled: true,
+                    password_hash: access.accounts[FIXTURE_ADMIN].password_hash.clone(),
+                    revision: 1,
+                    printers: std::collections::BTreeSet::from(["demo".into()]),
+                },
+            );
+        }
+        std::fs::write(
+            directory.join("access.toml"),
+            toml::to_string_pretty(&access).unwrap(),
+        )
+        .unwrap();
+        let catalog = ferriprint::managed::PrinterCatalog {
+            schema_version: 1,
+            revision: 1,
+            printers: config.printers.clone(),
+        };
+        std::fs::write(
+            directory.join("printers.toml"),
+            toml::to_string_pretty(&catalog).unwrap(),
+        )
+        .unwrap();
+    }
     std::fs::create_dir_all(config.state_dir.join("profiles")).unwrap();
+    std::fs::set_permissions(
+        config.state_dir.join("profiles"),
+        std::fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
     if !config.profile_path("demo").exists() {
         std::fs::write(
             config.profile_path("demo"),
@@ -319,6 +459,28 @@ pub fn config(directory: &std::path::Path, upstream: &str, port: u16) -> Config 
         .unwrap();
     }
     config
+}
+pub fn add_printer(config: &mut Config, name: &str) {
+    let mut printer = config.printers[0].clone();
+    printer.name = name.into();
+    printer.display_name = format!("Synthetic {name}");
+    printer.service_name = format!("Synthetic {name}");
+    config.printers.push(printer);
+    std::fs::write(
+        config.profile_path(name),
+        include_str!("../../examples/profile.toml"),
+    )
+    .unwrap();
+    let catalog = ferriprint::managed::PrinterCatalog {
+        schema_version: 1,
+        revision: 2,
+        printers: config.printers.clone(),
+    };
+    std::fs::write(
+        config.state_dir.join("printers.toml"),
+        toml::to_string_pretty(&catalog).unwrap(),
+    )
+    .unwrap();
 }
 pub fn settings(config: &Config) -> ferriprint::config::ProfileSettings {
     ferriprint::config::ProfileSettings::load(&config.profile_path("demo")).unwrap()
@@ -336,19 +498,40 @@ pub fn add_user(
     role: ferriprint::config::Role,
     password: &str,
 ) {
-    use std::os::unix::fs::PermissionsExt;
-    let path = config.state_dir.join(format!("{username}.argon2"));
-    std::fs::write(
-        &path,
-        ferriprint::auth::password_hash(password.as_bytes()).unwrap(),
-    )
-    .unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    config.access.users.push(ferriprint::config::UserConfig {
-        username: username.into(),
-        role,
-        password_hash_file: path,
-    });
+    let path = config.state_dir.join("access.toml");
+    let mut access: ferriprint::auth::AccessState =
+        toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    access.accounts.insert(
+        username.into(),
+        ferriprint::auth::Account {
+            role,
+            enabled: true,
+            password_hash: ferriprint::auth::password_hash(password.as_bytes())
+                .unwrap()
+                .into(),
+            revision: 1,
+            printers: config.printers.iter().map(|p| p.name.clone()).collect(),
+        },
+    );
+    access
+        .validate(config.access.anonymous_owner.as_deref())
+        .unwrap();
+    std::fs::write(&path, toml::to_string_pretty(&access).unwrap()).unwrap();
+}
+pub async fn principal(
+    engine: &ferriprint::jobs::JobEngine,
+    username: &str,
+    password: &str,
+) -> ferriprint::auth::Principal {
+    if username == "anonymous" {
+        return engine.auth.anonymous().unwrap();
+    }
+    use base64::Engine;
+    let header = format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"))
+    );
+    engine.auth.authenticate(&header).await.unwrap()
 }
 pub struct Frontend {
     pub app: Arc<ferriprint::server::App>,

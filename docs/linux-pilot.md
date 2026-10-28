@@ -22,15 +22,17 @@ previous immutable release and the private durable state for rollback.
 `install/ferriprint.service` runs static `ferriprint:ferriprint`, no login shell,
 no supplementary privileged groups, no capabilities and strict system/home/device
 protections. Its only persistent writable directory is `/var/lib/ferriprint`,
-mode0700. Bootstrap configuration and PPD belong in root-owned,
-service-group-readable `/etc/ferriprint`, mode0750 with files0640. Password hashes
-are different: regular non-symlink files must be **effectively private to root and
-the service UID**, including ACLs. Prefer root0600 originals exposed by
-LoadCredential. Linux systemd can present root0440 plus a named service-UID read
-ACL while group::--- and other::--- deny everyone else; group mode bits can be
-an ACL mask, not group access. Startup validates effective rights, never a special
-credential pathname or a blanket permission relaxation. The service cannot alter
-its bootstrap, backend paths, TLS originals, PPD or installed executable.
+mode0700. The startup configuration belongs in root-owned, service-group-readable
+`/etc/ferriprint`, mode0750 with configuration files0640; the service cannot edit
+its listener/TLS/network/trusted-source/notification transport. Managed accounts,
+catalog, acquired private PPDs and profiles instead belong to the static service
+UID under its0700 state directory, with owner-only managed files.
+Original TLS, legacy PHC-import and optional webhook-secret inputs remain
+effectively private to root/the service UID, including ACLs. Prefer root0600
+originals exposed by LoadCredential where runtime access is required. Linux may
+present root0440 plus a named service-UID ACL while group::---/other::--- deny
+everyone else; group mode bits can be an ACL mask. Existing FD/ACL validation
+remains mandatory, with no pathname exemption or broad permission relaxation.
 
 Inspect both `getent passwd/group` and local passwd/group files before changing
 an account. DynamicUser NSS names are not static users. If the existing service is
@@ -79,10 +81,7 @@ anonymous_trusted_lan = true
 anonymous_owner = "anonymous"
 anonymous_clients = ["198.51.100.20/32"]
 
-[[access.users]]
-username = "print-operator"
-role = "admin"
-password_hash_file = "/run/credentials/ferriprint.service/print-operator.hash"
+# Accounts and printer grants are NOT bootstrap records in0.3.
 ```
 
 Every other admitted source requires a configured credential for job and web/API
@@ -101,117 +100,140 @@ string when retaining its durable job history. Never claim this mode isolates
 people. A newly permitted client does not receive a made-up family account or
 automatic admin role.
 
-Generate a unique operator password in the approved secret store. Use
-`ferriprint user password-hash --output PATH` with protected stdin or a terminal;
-never put plaintext in an argument, URL, committed TOML or shared transcript.
-Only the Argon2id hash is installed. Hash-file paths in `[access.users]` should
-name the credential mount, for example
-`/run/credentials/ferriprint.service/print-operator.hash`. Add a host-owned service
-drop-in such as `LoadCredential=print-operator.hash:/etc/ferriprint/auth/print-operator.argon2`
-and keep that original root0600 under a root0700 directory. Do not use the0640
-configuration-file convention for hashes; it is deliberately rejected. Back up
-hash metadata safely, rotate through a fresh file and intentional frontend
-reload/restart, and never change native Mac queue credentials/defaults merely for
-an administration bootstrap.
+For a new empty state directory, create the first administrator as the intended
+static service UID; a hidden terminal or bounded stdin supplies the password:
+
+```text
+sudo -u ferriprint ferriprint --config /etc/ferriprint/ferriprint.toml user init --username print-operator
+```
+
+Use `/admin/users` for subsequent users, role/password changes, suspension and
+explicit per-printer grants; `/account` changes one's own password after verifying
+the current password. Administrators have global authority. Usernames, including
+suspended/historical owners, are permanently reserved. The last enabled admin
+cannot be removed through suspension/demotion. New accounts and anonymous users
+do not gain a new printer merely because its network is admitted.
+
+The0.3 `access.toml` authority is private service-writable state containing PHCs,
+not root-owned bootstrap `access.users` or one hash path per live account. Do not
+manually invent/replace managed account records or loosen secret permissions.
+For existing0.2 accounts, use the explicit stopped-service migration below rather
+than invoking first-user initialization against populated state.
 
 This frontend ownership policy does not secure separately reachable native CUPS,
 physical-printer or alternate print paths. Restrict those independently if
 end-to-end user privacy is required; this deployment does not change their
 existing firewall/queue policies.
 
-## Initial native queue/PPD setup
+## Initial trusted CUPS setup and complete web wizard
 
-The native queue must already work. Keep its PPD private and use the assistant:
+The native queue and its vendor driver must already work. Configure a trusted
+server **once** in the protected startup configuration, not once per printer:
 
-```sh
-ferriprint setup inspect \
-  --queue 'ipps://print.example.test:631/printers/native-queue' \
-  --ppd /etc/ferriprint/native-queue.ppd
+```toml
+[[cups_sources]]
+id = "office"
+server_uri = "ipps://cups.example.test:631/"
+username = "ferriprint"
+# Optional operator-reviewed public CA:
+# ca_certificate = "/etc/ferriprint/cups-ca.pem"
 ```
 
-If that upstream uses a private CA, pass its reviewed public CA with
-`--ca-certificate PATH`. Inspection fetches metadata only, enumerates PPD media
-sizes/margins/options and never modifies the queue or prints.
+Remote sources require IPPS. Optional source authentication uses its protected
+`auth.username`/`auth.password_env` configuration, never a credential-bearing URI.
+Queue/PPD acquisition stays on that exact trusted origin and canonical
+`/printers/QUEUE` resource. No network scan, arbitrary browser URL/path, driver
+installation, device/backend administration, native default change or print is
+part of onboarding.
 
-Create an operator-reviewed static bootstrap candidate naming the listener, TLS,
-access, state and immutable `[[printers]]` identity/PPD/backend. Then install one
-profile, interactively or from explicit reviewed choices:
+After first-admin initialization, an empty catalog is valid. Review TLS/network
+policy, validate offline as the service UID, then deliberately start only the
+frontend. Open the exact HTTPS origin corresponding to `public_url`, authenticate
+as administrator and choose `/admin/onboarding`:
 
-```sh
-ferriprint setup install \
-  --bootstrap /private/bootstrap-candidate.toml --printer office \
-  --output /private/reviewed-ferriprint.toml
+1. Select the trusted server and an existing freshly enumerated queue.
+2. Acquire its actual PPD; inspect model/state/formats/native choices and margins.
+3. Set the unique Ferriprint identity/display/service/location fields.
+4. Explicitly confirm tray/material/quality/color/duplex mappings. A native label
+   or input DPI alone does not establish material or physical engine quality.
+5. Set ordinary defaults and complete named recipes through validated controls.
+6. Review the exact source/queue/PPD and resolved native options, then confirm.
+7. Observe saved/HTTP-active separately from scoped discovery pending/published/
+   failed. Grant individual user/anonymous printer access explicitly.
+
+Drafts are bounded, private and tied to current administrator/revision/CSRF.
+Changed queues/PPDs, stale review or a competing catalog commit require review
+again. The active catalog references already durable private PPD/profile files;
+invalid requests do not leave an active partial printer. A post-rename durability
+failure is reported as applied-but-uncertain, never disguised as an uncommitted
+failure safe to blindly repeat.
+
+The offline CLI shares those validators and the same catalog commit:
+
+```text
+sudo -u ferriprint ferriprint --config /etc/ferriprint/ferriprint.toml setup inventory --source office
+sudo -u ferriprint ferriprint --config /etc/ferriprint/ferriprint.toml setup inspect --source office --queue native-queue
+sudo -u ferriprint ferriprint --config /etc/ferriprint/ferriprint.toml setup install --source office --queue native-queue --printer office --display-name "Office printer" --service-name "Office printer" --location "Office" --choices /etc/ferriprint/approved-choices.toml --confirm
+sudo -u ferriprint ferriprint --config /etc/ferriprint/ferriprint.toml check
 ```
 
-Without `--choices`, the assistant guides mapping/default choices using actual
-PPD options. Ambiguous quality semantics require operator choice; do not infer
-that the third option is necessarily High. Review its resolved option previews
-for each material/quality. Installation refuses overwriting existing output and
-creates a complete managed profile through the same validator as the service.
-It never installs a driver, uploads a PPD to the web UI or configures CUPS.
+`--choices` is an explicit reviewed wrapper, not a bare profile:
+`confirmed_native_mappings = true`, then `[settings]` with the example profile's
+scalar fields and fully nested `[settings.sources]`, material/quality/color/sides/
+defaults/recipe tables. Optional `[[previews]]` are standard job-template requests
+resolved before commit. Unsupported semantic choices do not get guessed defaults.
+The service lock prevents offline setup racing a running frontend. The browser
+is the complete interactive flow without per-printer TOML; the offline CLI needs
+its reviewed choices file. Neither path writes another startup configuration.
 
-For noninteractive review, pass `--choices /private/approved-choices.toml --confirm`.
-That document is not a bare profile: it has `confirmed_native_mappings = true`,
-then `[settings]` with `schema_version = 1` and the profile's scalar settings;
-mapping/default tables are nested as `[settings.sources]`,
-`[settings.media_types.stationery]`, `[settings.color_modes]`, `[settings.sides]`
-and `[settings.defaults]`. Optional `[[previews]]` contain standard job-template
-requests that are resolved through the same profile constraints and printed before
-installation. Without explicit native-mapping confirmation, installation fails.
+`state_dir/printers.toml` is the catalog authority;
+`state_dir/profiles/office.toml` is the sole editable mapping/default/recipe
+authority. Acquired PPDs, profiles and access/catalog files remain private and
+service-owned. The protected startup file contains neither bootstrap users nor
+printer bindings. Offline `check` is not a proof of runtime TLS/secret availability,
+live backend reachability or discovery; exercise those separately without paper.
 
-There is one authoritative editable profile per printer:
-`state_dir/profiles/office.toml`. It contains source/media-type/quality/color/sides
-mappings, defaults, `declared_ready`, formats and resolutions. The static bootstrap
-contains no inline maps or override layer. For the checked-in non-printing example,
-copy the separate profile before `check`/`serve`:
+### Explicit0.2 migration and stopped-systemd credential import
 
-```sh
-install -d -m 0700 ./var/demo/profiles
-install -m 0600 examples/profile.toml ./var/demo/profiles/demo.toml
-ferriprint --config examples/ferriprint.toml check
+Complete the no-active/held/uncertain-jobs gate, stop only Ferriprint and preserve
+the exact static UID/GID, private state, old immutable binary/config/profile and
+root-only original PHCs. Do not copy/reset/reown the live database or replay a
+job. A stopped unit may no longer have `/run/credentials/ferriprint.service`.
+
+When those runtime paths are absent, prepare a bounded owner-only mapping file
+with exactly every legacy configured username and explicitly selected persistent
+PHC source:
+
+```toml
+[password_hash_files]
+print-operator = "/etc/ferriprint/auth/print-operator.argon2"
+office-user = "/etc/ferriprint/auth/office-user.argon2"
 ```
 
-For a real service use absolute paths in the reviewed bootstrap candidate. After
-the no-active-jobs gate, generate as the service UID so the sole managed profile
-is born with the right owner, then promote only the static bootstrap as root.
-Do **not** recursively chown existing state/spool/database:
+Run the explicit import with sufficient existing permission to read those
+protected originals; a root-run import retains the state directory's service
+identity for newly created managed files:
 
-```sh
-set -euo pipefail
-sudo install -d -m 0700 -o ferriprint -g ferriprint /var/lib/ferriprint/setup-bootstrap
-sudo -u ferriprint ferriprint setup install \
-  --bootstrap /etc/ferriprint/bootstrap.candidate.toml --printer office \
-  --output /var/lib/ferriprint/setup-bootstrap/ferriprint.toml
-sudo -u ferriprint ferriprint --config /var/lib/ferriprint/setup-bootstrap/ferriprint.toml check
-bootstrap_tmp="$(sudo mktemp /etc/ferriprint/bootstrap.XXXXXXXX)"
-trap 'sudo rm -f "$bootstrap_tmp"' EXIT
-# Read the service-owned output as the service UID, not as root following a
-# potentially substituted source symlink. The destination is root-owned/new.
-sudo -u ferriprint cat /var/lib/ferriprint/setup-bootstrap/ferriprint.toml | sudo tee "$bootstrap_tmp" >/dev/null
-sudo chown root:ferriprint "$bootstrap_tmp"
-sudo chmod 0640 "$bootstrap_tmp"
-sudo -u ferriprint ferriprint --config "$bootstrap_tmp" check
-sudo mv -T "$bootstrap_tmp" /etc/ferriprint/ferriprint.toml
-trap - EXIT
-sudo -u ferriprint rm /var/lib/ferriprint/setup-bootstrap/ferriprint.toml
-sudo -u ferriprint rmdir /var/lib/ferriprint/setup-bootstrap
+```text
+ferriprint --config /etc/ferriprint/ferriprint-0.2.toml migrate-0.2 --output /etc/ferriprint/ferriprint-0.3.toml --credential-sources /etc/ferriprint/migration-sources.toml
 ```
 
-The managed profile stays service-owned0600 under its private state directory;
-the active bootstrap is root:service-group0640 and read-only to the service.
-Offline `check` contacts no printer and does not open TLS/hash secrets: actual
-runtime credential/ACL loading and startup remain a separate acceptance gate.
+The old input is not rewritten. Existing destinations, missing/extra map keys,
+symlink/unsafe-permission inputs or a held service lock fail rather than
+overwriting or relaxing validation. Without the option only the configured old
+paths are attempted; there is no guessed persistent-path fallback.
+Imported historical owners are reserved, all accounts/bindings/defaults and job
+identity/sequence/time-origin/backend/resolved state are preserved, and no recipe
+or additional principal is invented. Review the generated protected startup file's
+ownership/readability separately from owner-only PHCs/managed state; validate as
+the service UID before selecting it for an explicitly authorized activation.
+Do not apply this command to an unsupported original0.1 inline schema.
 
-### Migration from the original inline profile schema
-
-Stop only Ferriprint after the job/spool gate. Copy the existing mapping/default/
-format/resolution fields byte-for-byte into the named managed profile, rename only
-`ready` to `declared_ready`, and remove those inline fields from the bootstrap.
-Keep immutable queue identity, PPD path, default native choices and durable owner
-strings unchanged. Replace the old singleton `[auth]` with explicit `[access]`
-users only through a reviewed credential migration. There are no old/new aliases.
-Validate offline with the new binary before switching the selected release.
-Do not reset SQLite, lose job sequence numbers or replay an uncertain submission.
+Offline `user recover-admin --username print-operator` accepts a new protected
+stdin/hidden-terminal password under the service lock. It is not an online
+recovery endpoint. Browser password rotation invalidates old credentials; use a
+separate clean browser context when proving that boundary because Basic auth
+can be cached across tabs.
 
 ## Rust-owned secure Bonjour
 
@@ -265,9 +287,9 @@ acceptance requirement.
 ### Onboarding an additional authenticated Mac
 
 1. Admit only an already reviewed trusted client/network in both app and narrow
-   host firewall policy. Configure a legitimate personal `user` identity through
-   protected bootstrap/LoadCredential first; a new IP is not an account or an
-   admin grant. Keep deliberately retained anonymous sources explicit and narrow.
+   host firewall policy. Create its legitimate personal user through browser
+   account administration and grant the intended printer; a new IP is not an
+   account/admin grant. Keep anonymous sources and managed printer grants narrow.
 2. Record existing destinations/defaults privately before adding anything. In
    Default discovery select the exact frontend name/target/UUID and its automatic
    driverless Use, not a similarly named physical printer or Generic PostScript.
@@ -301,13 +323,19 @@ uses the configured user; `/admin` always requires an authenticated admin,
 even when that Mac can print anonymously. The root and job APIs show only the
 principal's jobs unless the principal is an explicit admin.
 
-`GET /admin/printers/office` presents structured default selectors and advanced
-managed-profile TOML. Validate first, review the resolved choices, then save. The
-form carries the current revision and CSRF token. Saving rejects concurrent stale
-edits and any active/held/uncertain printer job, validates all PPD mappings,
-atomically persists the sole profile and activates it with refreshed discovery
-metadata. It does not require a frontend restart. Queue identity, PPD/backend,
-TLS/authentication and filesystem paths are deliberately not web-editable.
+`GET /admin/printers/office` edits structured defaults and advanced native
+mappings; `/admin/printers/office/recipes` edits complete named tickets. Validate
+first, inspect resolved options, then save with current revision/CSRF. Stale
+edits and active/held/uncertain jobs block profile/recipe saves; old jobs keep
+immutable resolved tickets. Explicit recipe overrides use the sole resolver.
+Standard `job-presets-supported` exposes complete Job Template collections; clients
+must copy those fields. There is no `job-preset-name` request selector and no
+promise every native print dialog exposes site presets. The authorized export
+`/api/printers/office/recipes/KEY` provides a resolved ticket for controlled clients.
+
+`/admin/users` and `/account` manage current account/password/printer authority.
+Suspension or revoked grants prevent new access and not-yet-dispatched work;
+already dispatched work is not falsely described as canceled upstream.
 
 The job view shows durable state, owner, resolved options and upstream result.
 Authorized Cancel issues the actual upstream Cancel-Job by its recorded ID;
@@ -332,6 +360,40 @@ If no physical tray/count attributes exist, say unknown/unsupported. Failed
 refreshes become stale/unknown without fabricated zeros or a false healthy state;
 preserve queue warnings such as `media-empty-report`. No status request prints,
 changes a queue or exposes a community/credential.
+
+## Active webhook alerts
+
+The protected startup configuration fixes the destination and optional private
+bearer-secret reference:
+
+```toml
+[notifications]
+webhook_url = "https://notify.example.test/ferriprint"
+bearer_secret_file = "/run/credentials/ferriprint.service/notify.token"
+timeout_secs = 10
+max_attempts = 5
+backoff_initial_secs = 5
+backoff_max_secs = 3600
+```
+
+The secret is optional; if used, expose an existing root0600 original through a
+reviewed host-owned LoadCredential entry without loosening its permissions.
+Omitting notifications config disables this transport. HTTPS verifies trust and
+forbids redirects; literal-loopback HTTP is only for an isolated test receiver.
+No browser control accepts another destination, arbitrary credential/path or URL.
+
+At `/admin/notifications`, explicitly enable a printer's events and send a real
+diagnostic. Check actual outbox status/attempts/acknowledgement, not just a button
+response. Persisted transitions cover failed/stopped jobs, unreachable native or
+configured telemetry sources, and reported paper shortage plus observed recovery.
+Repeated polls/restart do not create a fresh transition; unknown/stale readings
+cannot manufacture a paper recovery. Historical failures baseline on enable.
+
+Delivery is at least once, with stable event IDs for receiver deduplication.
+Pending/retry state survives restart; exhausted attempts remain visibly failed
+and need explicit CSRF-protected retry.2xx acknowledges receipt, not downstream
+email/chat delivery or a human reading it. Payloads exclude document/title/owner/
+credential data; do not put arbitrary remote messages into notification logs.
 
 ## Frontend-only cutover and rollback
 

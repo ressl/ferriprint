@@ -39,6 +39,47 @@ impl DiscoveryConfig {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct PublicationStatus {
+    pub state: String,
+    pub revision: u64,
+    pub failure: Option<String>,
+}
+impl PublicationStatus {
+    pub fn initial(enabled: bool) -> Self {
+        Self {
+            state: if enabled { "pending" } else { "disabled" }.into(),
+            revision: 0,
+            failure: None,
+        }
+    }
+}
+pub fn preflight(
+    config: &crate::config::Config,
+    printer: &crate::config::PrinterConfig,
+    cap: &crate::domain::Capabilities,
+    urf: &[String],
+    pwg: &[String],
+) -> Result<()> {
+    if config.discovery.is_none() {
+        return Ok(());
+    }
+    #[cfg(any(target_os = "linux", test))]
+    {
+        ensure!(
+            config.tls.is_some() && !config.listen.ip().is_loopback(),
+            "discovery requires a non-loopback TLS listener"
+        );
+        fqdn(&config.public_url)?;
+        Service::from_printer(printer, cap, urf, pwg, &config.printer_uri(&printer.name))?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", test)))]
+    {
+        let _ = (printer, cap, urf, pwg);
+        anyhow::bail!("native discovery requires Linux Avahi");
+    }
+}
 /// Owns the registration task. Start only after the listener and TLS are ready;
 /// stop before shutting the listener down. Dropping aborts the task and disconnects
 /// its dedicated D-Bus connection, which also withdraws every entry group.
@@ -67,7 +108,14 @@ impl Discovery {
             changes.borrow_and_update();
             let snapshot = Snapshot::load(app).await?;
             // Absence, permissions, collisions, and failed probing are startup errors.
-            let registration = avahi::Registration::start(&interface, &snapshot).await?;
+            let registration = if snapshot.services.is_empty() {
+                None
+            } else {
+                Some(avahi::Registration::start(&interface, &snapshot).await?)
+            };
+            if registration.is_some() {
+                app.discovery_status.write().state = "published".into();
+            }
             tracing::info!(
                 interface = %config.interface,
                 protocol = ?config.protocol,
@@ -312,22 +360,18 @@ impl Snapshot {
             "discovery public_url and bound listen ports must match and be nonzero"
         );
         let host = fqdn(&app.config.public_url)?;
-        let mut services = Vec::with_capacity(app.config.printers.len());
-        for config in &app.config.printers {
-            let printer = app
-                .printers
-                .get(&config.name)
-                .with_context(|| format!("missing runtime printer {}", config.name))?
-                .read()
-                .await;
+        let entries = app.printer_snapshot();
+        let mut services = Vec::with_capacity(entries.len());
+        for (name, entry) in entries {
+            let printer = entry.read().await;
             let mut service = Service::from_printer(
                 &printer.config,
                 printer.profile.capabilities(),
                 &printer.urf_supported,
                 &printer.pwg_types,
-                &app.config.printer_uri(&config.name),
+                &app.config.printer_uri(&name),
             )
-            .with_context(|| format!("advertise printer {}", config.name))?;
+            .with_context(|| format!("advertise printer {name}"))?;
             // AIR is service-wide. Mixed trusted-anonymous/authenticated access
             // must instead advertise its requirement per source over IPP.
             if !app.config.access.anonymous_trusted_lan {
@@ -335,10 +379,6 @@ impl Snapshot {
             }
             services.push(service);
         }
-        ensure!(
-            !services.is_empty(),
-            "discovery requires at least one printer"
-        );
         Ok(Self {
             host,
             port,
@@ -761,7 +801,7 @@ mod avahi {
     pub(super) async fn monitor(
         app: Weak<App>,
         interface: Interface,
-        registration: Registration,
+        registration: Option<Registration>,
         mut changes: watch::Receiver<u64>,
         mut shutdown: oneshot::Receiver<()>,
     ) -> Result<()> {
@@ -772,7 +812,7 @@ mod avahi {
             Retry,
         }
 
-        let mut registration = Some(registration);
+        let mut registration = registration;
         // Only the kernel interface identity needs a timer: a recreated interface
         // may have the same name but a different ifindex. Idle D-Bus stays silent.
         let mut interface_tick = interval(Duration::from_secs(2));
@@ -825,10 +865,21 @@ mod avahi {
             if let Some(mut old) = registration.take() {
                 old.withdraw().await;
             }
+            if let Some(app) = app.upgrade() {
+                let mut status = app.discovery_status.write();
+                status.revision = *app.profile_changes.borrow();
+                status.state = if loss.is_some() { "failed" } else { "pending" }.into();
+                status.failure = loss.as_ref().map(|error| {
+                    if is_collision(error) {
+                        "service-name collision".into()
+                    } else {
+                        "discovery registration lost".into()
+                    }
+                });
+            }
             if let Some(error) = loss {
-                if is_collision(&error) {
-                    return Err(error);
-                }
+                // A collision withdraws advertising and remains visibly failed;
+                // the committed HTTP/catalog authority is never rolled back.
                 tracing::warn!(%error, "Avahi registration lost; waiting to re-register");
                 retry_at = Instant::now() + retry_delay;
             } else {
@@ -840,17 +891,51 @@ mod avahi {
             let Some(app) = app.upgrade() else {
                 break;
             };
-            let snapshot = Snapshot::load(&app).await?;
-            drop(app);
+            let revision = *changes.borrow_and_update();
+            let snapshot = match Snapshot::load(&app).await {
+                Ok(snapshot) => snapshot,
+                Err(_) => {
+                    let mut status = app.discovery_status.write();
+                    status.state = "failed".into();
+                    status.failure = Some("committed discovery snapshot invalid".into());
+                    retry_at = Instant::now() + retry_delay;
+                    retry_delay = (retry_delay * 2).min(RETRY_MAX);
+                    continue;
+                }
+            };
+            if snapshot.services.is_empty() {
+                retry_at = Instant::now() + RETRY_MAX;
+                continue;
+            }
             match Registration::start(&interface, &snapshot).await {
                 Ok(current) => {
                     tracing::info!("Avahi services registered from current printer profiles");
+                    {
+                        let mut status = app.discovery_status.write();
+                        status.revision = *app.profile_changes.borrow();
+                        status.state = if status.revision == revision {
+                            "published"
+                        } else {
+                            "pending"
+                        }
+                        .into();
+                        status.failure = None;
+                    }
                     registration = Some(current);
                     retry_delay = RETRY_MIN;
                 }
                 Err(error) => {
-                    if is_collision(&error) {
-                        return Err(error);
+                    {
+                        let mut status = app.discovery_status.write();
+                        status.state = "failed".into();
+                        status.failure = Some(
+                            if is_collision(&error) {
+                                "service-name collision"
+                            } else {
+                                "Avahi registration unavailable"
+                            }
+                            .into(),
+                        );
                     }
                     tracing::warn!(%error, "Avahi re-registration failed; services remain withdrawn");
                     retry_at = Instant::now() + retry_delay;
@@ -1023,6 +1108,7 @@ upstream_uri = "ipps://cups.example.test/printers/native"
             qualities: vec![4],
             resolutions: vec![Resolution { x: 300, y: 300 }],
             document_formats: vec!["application/pdf".into()],
+            recipes: std::collections::BTreeMap::new(),
             defaults: ResolvedJob {
                 options: DriverOptions::new(),
                 media: Media {

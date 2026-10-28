@@ -1,5 +1,11 @@
 # Six-point implementation and acceptance plan
 
+Historical0.2 implementation/acceptance contract. It remains evidence for that
+immutable release, not current0.3 setup instructions. The breaking managed-state
+cutover and five additions are specified in
+[the0.3 plan](five-point-implementation.md); use the current
+[deployment guide](linux-pilot.md) for init/migration/trusted-source commands.
+
 This document records the requested scope **before implementation**. All six points
 are separate acceptance obligations. An unchecked acceptance item is a release gate,
 not an implemented product feature. Evidence must name the exact revision, toolchain,

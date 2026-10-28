@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     io::Read,
     path::Path,
@@ -295,8 +296,13 @@ pub struct PpdInventory {
 }
 impl PpdInventory {
     pub fn load(path: &Path) -> Result<Self> {
-        let ppd = read_ppd(path)?;
-        Ok(Self {
+        Ok(Self::from_ppd(read_ppd(path)?))
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(Self::from_ppd(parse_ppd_bytes(bytes)?))
+    }
+    fn from_ppd(ppd: Ppd) -> Self {
+        Self {
             model: ppd.model,
             pages: ppd
                 .pages
@@ -309,7 +315,7 @@ impl PpdInventory {
             choices: ppd.choices,
             defaults: ppd.defaults,
             constraints: ppd.constraints,
-        })
+        }
     }
 }
 fn read_ppd(path: &Path) -> Result<Ppd> {
@@ -320,22 +326,26 @@ fn read_ppd(path: &Path) -> Result<Ppd> {
         .by_ref()
         .take(16 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)?;
+    parse_ppd_bytes(&bytes)
+}
+fn parse_ppd_bytes(bytes: &[u8]) -> Result<Ppd> {
     ensure!(bytes.len() <= 16 * 1024 * 1024, "PPD exceeds 16 MiB limit");
-    if bytes.starts_with(&[0x1f, 0x8b]) {
-        let mut decoded = Vec::new();
-        flate2::read::GzDecoder::new(bytes.as_slice())
+    let mut decoded = Vec::new();
+    let bytes = if bytes.starts_with(&[0x1f, 0x8b]) {
+        flate2::read::GzDecoder::new(bytes)
             .take(16 * 1024 * 1024 + 1)
             .read_to_end(&mut decoded)?;
         ensure!(
             decoded.len() <= 16 * 1024 * 1024,
             "decompressed PPD exceeds 16 MiB limit"
         );
-        bytes = decoded;
-    }
-    let text = match String::from_utf8(bytes) {
-        Ok(text) => text,
-        Err(error) => {
-            let bytes = error.into_bytes();
+        decoded.as_slice()
+    } else {
+        bytes
+    };
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => Cow::Borrowed(text),
+        Err(_) => {
             ensure!(
                 bytes
                     .split(|b| *b == b'\n')
@@ -343,7 +353,7 @@ fn read_ppd(path: &Path) -> Result<Ppd> {
                         && line.windows(9).any(|w| w == b"ISOLatin1")),
                 "PPD must be UTF-8 or declare ISOLatin1"
             );
-            bytes.into_iter().map(char::from).collect()
+            Cow::Owned(bytes.iter().copied().map(char::from).collect::<String>())
         }
     };
     Ppd::parse(&text)
@@ -359,6 +369,10 @@ impl PrinterProfile {
         settings.validate()?;
         let ppd = read_ppd(&config.ppd)?;
         Self::from_ppd(ppd, settings)
+    }
+    pub fn from_ppd_bytes(bytes: &[u8], settings: &ProfileSettings) -> Result<Self> {
+        settings.validate()?;
+        Self::from_ppd(parse_ppd_bytes(bytes)?, settings)
     }
     fn from_ppd(ppd: Ppd, settings: &ProfileSettings) -> Result<Self> {
         if ppd.choices.contains_key("InputSlot") {
@@ -457,6 +471,7 @@ impl PrinterProfile {
                 resolutions: settings.resolutions.clone(),
                 document_formats: settings.document_formats.clone(),
                 defaults: dummy,
+                recipes: BTreeMap::new(),
             },
             ppd,
             config: settings.clone(),
@@ -465,6 +480,29 @@ impl PrinterProfile {
             .resolve(&JobTemplate::default(), &settings.document_formats[0])
             .context("invalid configured defaults")?;
         profile.capabilities.defaults = defaults;
+        ensure!(settings.recipes.len() <= 128, "too many recipes");
+        for (key, recipe) in &settings.recipes {
+            crate::recipes::validate_key(key)?;
+            recipe
+                .validate()
+                .with_context(|| format!("invalid recipe {key}"))?;
+            let page = profile
+                .named_page(&recipe.media, recipe.borderless)
+                .with_context(|| format!("recipe {key}: unavailable media or margin variant"))?;
+            let resolved = profile
+                .resolve(
+                    &recipe.job_template(&page.media),
+                    &settings.document_formats[0],
+                )
+                .with_context(|| format!("invalid recipe {key}"))?;
+            profile.capabilities.recipes.insert(
+                key.clone(),
+                ResolvedRecipe {
+                    display_name: recipe.display_name.clone(),
+                    resolved,
+                },
+            );
+        }
         for ready in &settings.declared_ready {
             let media = profile
                 .named_page(&ready.media, ready.borderless)
@@ -501,6 +539,9 @@ impl PrinterProfile {
     pub fn capabilities(&self) -> &Capabilities {
         &self.capabilities
     }
+    pub fn recipes(&self) -> &BTreeMap<String, ResolvedRecipe> {
+        &self.capabilities.recipes
+    }
     pub fn restrict_formats(&mut self, upstream: &[String]) -> Result<()> {
         self.capabilities
             .document_formats
@@ -510,6 +551,9 @@ impl PrinterProfile {
             "configured formats have no intersection with upstream document-format-supported"
         );
         self.capabilities.defaults.document_format = self.capabilities.document_formats[0].clone();
+        for recipe in self.capabilities.recipes.values_mut() {
+            recipe.resolved.document_format = self.capabilities.document_formats[0].clone();
+        }
         Ok(())
     }
     /// Decoder tokens come from CUPS; quality presets belong to this frontend.
@@ -572,10 +616,116 @@ impl PrinterProfile {
             .iter()
             .find(|p| p.media.name == name && (p.media.margins == Margins::default()) == borderless)
     }
+    /// Expand a complete recipe, then apply only the explicitly supplied fields.
+    /// Like ordinary IPP tickets, an explicit media-col takes precedence over a
+    /// fallback media attribute. It never inherits unspecified printer defaults.
+    pub fn resolve_recipe(
+        &self,
+        key: &str,
+        overrides: &JobTemplate,
+        format: &str,
+    ) -> std::result::Result<ResolvedJob, AttributeError> {
+        let base = &self
+            .capabilities
+            .recipes
+            .get(key)
+            .ok_or_else(|| AttributeError::new("recipe", "unknown recipe key"))?
+            .resolved;
+        let col = overrides.media_col.as_ref();
+        if col.is_some_and(|c| c.width.is_some() != c.height.is_some()) {
+            return Err(AttributeError::new(
+                "media-col",
+                "media-size requires both dimensions",
+            ));
+        }
+        let inherit_size = match col {
+            Some(c) => {
+                c.name.as_deref().is_none_or(|name| name == base.media.name)
+                    && c.width.is_none_or(|width| width == base.media.width)
+                    && c.height.is_none_or(|height| height == base.media.height)
+            }
+            None => overrides.media.is_none(),
+        };
+        let size_name = col.and_then(|c| c.name.as_deref()).or_else(|| {
+            if inherit_size {
+                Some(base.media.name.as_str())
+            } else if col.is_none() {
+                overrides.media.as_deref()
+            } else {
+                None
+            }
+        });
+        let media_col = MediaRequest {
+            name: size_name.map(str::to_owned),
+            width: col
+                .and_then(|c| c.width)
+                .or(inherit_size.then_some(base.media.width)),
+            height: col
+                .and_then(|c| c.height)
+                .or(inherit_size.then_some(base.media.height)),
+            left: col
+                .and_then(|c| c.left)
+                .or(inherit_size.then_some(base.media.margins.left)),
+            bottom: col
+                .and_then(|c| c.bottom)
+                .or(inherit_size.then_some(base.media.margins.bottom)),
+            right: col
+                .and_then(|c| c.right)
+                .or(inherit_size.then_some(base.media.margins.right)),
+            top: col
+                .and_then(|c| c.top)
+                .or(inherit_size.then_some(base.media.margins.top)),
+            source: Some(
+                col.and_then(|c| c.source.as_deref())
+                    .unwrap_or(&base.source)
+                    .to_owned(),
+            ),
+            media_type: Some(
+                col.and_then(|c| c.media_type.as_deref())
+                    .unwrap_or(&base.media_type)
+                    .to_owned(),
+            ),
+        };
+        let request = JobTemplate {
+            media: None,
+            media_col: Some(media_col),
+            copies: Some(overrides.copies.unwrap_or(base.copies)),
+            quality: Some(overrides.quality.unwrap_or(base.quality)),
+            color_mode: Some(
+                overrides
+                    .color_mode
+                    .as_deref()
+                    .unwrap_or(&base.color_mode)
+                    .to_owned(),
+            ),
+            sides: Some(overrides.sides.as_deref().unwrap_or(&base.sides).to_owned()),
+            orientation: Some(overrides.orientation.unwrap_or(base.orientation)),
+            resolution: Some(overrides.resolution.unwrap_or(base.resolution)),
+            print_scaling: Some(
+                overrides
+                    .print_scaling
+                    .as_deref()
+                    .unwrap_or(&base.print_scaling)
+                    .to_owned(),
+            ),
+        };
+        // An explicit size replacement discards recipe margins. Prefer a
+        // bordered PPD variant when none were requested, independently of
+        // mutable printer defaults; exact recipe/override margins still win.
+        self.resolve_with_margin_preference(&request, format, false)
+    }
     pub fn resolve(
         &self,
         request: &JobTemplate,
         format: &str,
+    ) -> std::result::Result<ResolvedJob, AttributeError> {
+        self.resolve_with_margin_preference(request, format, self.config.defaults.borderless)
+    }
+    fn resolve_with_margin_preference(
+        &self,
+        request: &JobTemplate,
+        format: &str,
+        borderless: bool,
     ) -> std::result::Result<ResolvedJob, AttributeError> {
         let err = AttributeError::new;
         if !self
@@ -617,8 +767,8 @@ impl PrinterProfile {
             if name.is_none() && col.width.is_none() {
                 candidates.retain(|p| p.media.name == d.media);
             }
-            // Only unspecified margins may use the configured bordered/borderless preference.
-            candidates.sort_by_key(|p| (p.media.margins == Margins::default()) != d.borderless);
+            // Only unspecified margins may use the caller's margin preference.
+            candidates.sort_by_key(|p| (p.media.margins == Margins::default()) != borderless);
             candidates.first().copied().ok_or_else(|| {
                 err(
                     "media-col",
@@ -626,7 +776,7 @@ impl PrinterProfile {
                 )
             })?
         } else {
-            self.named_page(request.media.as_deref().unwrap_or(&d.media), d.borderless)
+            self.named_page(request.media.as_deref().unwrap_or(&d.media), borderless)
                 .ok_or_else(|| {
                     err(
                         "media",

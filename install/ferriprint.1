@@ -8,18 +8,21 @@ ferriprint \- secure driverless IPP frontend for an existing native CUPS queue
 .RB [ --config " PATH"]
 .RI [ COMMAND ]
 .SH DESCRIPTION
-Ferriprint validates standard IPP media, margins, quality, tray, color and sides
-against an operator-supplied private PPD and one managed profile per printer.
-It forwards documents and resolved native options to an existing CUPS queue.
-It does not rasterize documents, install vendor drivers, configure CUPS queues
-or certify physical output.
+Ferriprint validates standard IPP media, margins, quality, tray, color and sides,
+including complete named print recipes, against the private PPD and managed
+profile. It forwards documents and resolved native options to an existing CUPS
+queue. Accounts, printer grants and installed bindings have private managed state.
+It does not rasterize documents, install vendor drivers or certify physical output.
 .SH CONFIGURATION
 The default bootstrap file is ferriprint.toml in the current directory.
 The packaged service reads /etc/ferriprint/ferriprint.toml.
-Static printer identity, PPD and upstream paths belong in that file.
-Editable mapping/default data belongs only in
-.I state_dir/profiles/NAME.toml
-and is validated against the PPD. See the installed TOML examples and setup guide.
+Listener, TLS, network/anonymous policy, trusted CUPS server origins and optional
+fixed webhook transport belong in the protected startup file. Version0.3 rejects
+legacy bootstrap access.users and printers; use the explicit migrate-0.2 import.
+Accounts/PHCs and grants live only in state_dir/access.toml; active printer
+bindings live only in state_dir/printers.toml. Editable mapping/default/complete
+recipe data lives only in state_dir/profiles/NAME.toml. The trusted-source wizard
+privately acquires PPDs; neither browser nor CLI configures a native queue.
 .SH COMMANDS
 .TP
 .B check
@@ -31,15 +34,31 @@ Start the frontend, probe upstream formats and reconcile durable jobs.
 This is the default command when no subcommand is given.
 .TP
 .B setup
-Create reviewed bootstrap configuration and a managed profile from an existing
-CUPS queue and an operator-provided PPD. Consult
+Enumerate, inspect or install an existing queue from a protected trusted CUPS
+source, using the same validators/catalog commit as /admin/onboarding.
+The install command requires explicit confirmed choices. Consult
 .B ferriprint setup --help
-for required paths and mapping choices. This does not configure CUPS or print.
+for subcommands; no arbitrary URI/PPD-path fallback or driver installation exists.
+No setup step submits a print.
+.TP
+.B user init --username NAME
+Initialize the first managed administrator and empty catalog offline as the
+intended state owner. Read a hidden terminal or bounded stdin password, never argv.
+.TP
+.B user recover-admin --username NAME
+Offline administrator recovery with the service lock/private-state validators;
+not a network backdoor.
+.TP
+.B migrate-0.2 --output PATH [--credential-sources PATH]
+Import legacy users/printers explicitly while stopped, preserving durable job
+ownership/identity/defaults. An optional protected TOML password_hash_files map
+names exactly all persistent PHC sources when old systemd runtime paths vanished.
+Old input is retained; existing destinations/unsafe inputs reject without overwrite.
 .TP
 .B user password-hash
-Generate an Argon2id password hash from protected standard input or a terminal.
-Consult command help for the output file option. Never pass plaintext credentials
-in command-line arguments or store them in public configuration.
+Auxiliary Argon2id generation from protected stdin/terminal, including preparation
+of legacy import sources; not the0.3 runtime account store. Never pass plaintext
+credentials in argv, URLs or public configuration.
 .TP
 .B abandon
 Offline escape hatch for a job with unknown upstream submission outcome.
@@ -54,6 +73,19 @@ Explicit anonymous trusted-LAN admission is a shared principal, not per-user iso
 Administration always requires an authenticated admin role, including when anonymous
 IPP printing is enabled. State-changing browser actions require a same-origin
 CSRF-protected request.
+Ordinary users require current enabled accounts and per-printer grants; admins
+have explicit global rights. Suspended/historical usernames cannot be reused.
+The final enabled admin cannot be suspended or demoted. Browser users/rights are
+managed at /admin/users; own-password changes at /account verify the old password.
+.PP
+Complete recipes are exposed as standard job-presets-supported collections.
+Clients copy their Job Template fields; no job-preset-name selector is invented
+and native-dialog visibility is not promised. Explicit supported overrides win.
+.PP
+The fixed optional webhook transport persists privacy-minimal operational
+transitions/outbox/retries. At-least-once delivery requires receiver event-ID
+deduplication. Queued is not delivered;2xx is acknowledgement, not proof a human
+read a message. Unknown/stale measurements never prove empty paper or recovery.
 .PP
 Within the existing network/TLS boundary, unauthenticated capability
 Get-Printer-Attributes and the corresponding-source offer are permitted.
@@ -67,7 +99,8 @@ Private keys, password hashes, vendor PPDs and durable job state remain outside
 public source/package archives. The service obtains TLS keys through systemd
 LoadCredential from operator-managed root-only paths. Never broaden ACME key permissions.
 .PP
-Password hashes must be regular, non-symlink files effectively private to root
+Legacy import PHCs and optional bearer-secret inputs must be regular,
+non-symlink files effectively private to root
 and the service UID. Keep originals root0600. A Linux systemd runtime file may
 be root0440 with a named service-UID read ACL and no effective group/other access;
 the ACL mask is not itself a group grant. No credential-path exemption is used.
@@ -77,7 +110,8 @@ the ACL mask is not itself a group grant. No credential-path exemption is used.
 Operator-managed static bootstrap configuration; not supplied as an active conffile.
 .TP
 .I /var/lib/ferriprint
-Private durable jobs, spool and managed profiles; retain across upgrades/removal.
+Private accounts/catalog/PPDs/profiles, durable jobs, spool and notification outbox;
+retain ownership and all state across upgrades/removal.
 .TP
 .I /usr/share/doc/ferriprint
 Examples, setup/security/deployment guides, license notices and build metadata.

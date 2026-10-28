@@ -79,6 +79,51 @@ pub struct ResolvedJob {
     pub document_format: String,
 }
 
+impl ResolvedJob {
+    /// Complete CUPS options for a native client targeting the Ferriprint queue.
+    /// Each pair is an option name/value, suitable for its own `-o name=value`
+    /// argument. Callers must pass arguments separately or shell-quote them;
+    /// these are not a shell command or options for bypassing Ferriprint and
+    /// addressing its native backend. No preset-aware client GUI is implied.
+    pub fn cups_options(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "media-col".into(),
+                format!(
+                    "{{media-size={{x-dimension={} y-dimension={}}} media-size-name={} media-left-margin={} media-bottom-margin={} media-right-margin={} media-top-margin={} media-source={} media-type={}}}",
+                    self.media.width,
+                    self.media.height,
+                    self.media.name,
+                    self.media.margins.left,
+                    self.media.margins.bottom,
+                    self.media.margins.right,
+                    self.media.margins.top,
+                    self.source,
+                    self.media_type,
+                ),
+            ),
+            ("print-quality".into(), self.quality.to_string()),
+            ("print-color-mode".into(), self.color_mode.clone()),
+            ("sides".into(), self.sides.clone()),
+            ("copies".into(), self.copies.to_string()),
+            ("orientation-requested".into(), self.orientation.to_string()),
+            (
+                "printer-resolution".into(),
+                format!("{}x{}dpi", self.resolution.x, self.resolution.y),
+            ),
+            ("print-scaling".into(), self.print_scaling.clone()),
+        ]
+    }
+}
+
+/// Resolved recipe metadata for browser/JSON consumers, keyed by the stable
+/// recipe identifier in `Capabilities::recipes`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResolvedRecipe {
+    pub display_name: String,
+    pub resolved: ResolvedJob,
+}
+
 #[derive(Clone, Debug)]
 pub struct Capabilities {
     pub make_and_model: String,
@@ -92,6 +137,7 @@ pub struct Capabilities {
     pub resolutions: Vec<Resolution>,
     pub document_formats: Vec<String>,
     pub defaults: ResolvedJob,
+    pub recipes: BTreeMap<String, ResolvedRecipe>,
 }
 
 #[derive(Debug, thiserror::Error)]

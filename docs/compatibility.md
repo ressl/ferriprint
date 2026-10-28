@@ -68,3 +68,30 @@ An existing scheduled CUPS logrotate action restarted the native scheduler durin
 the window; this concurrent maintenance exception is explicitly recorded, not
 misrepresented as unchanged native invocation. Global Avahi/Docker/containerd
 invocations and native configuration/PPD/defaults/TLS stayed unchanged.
+
+## 0.3 development evidence boundaries
+
+The five-point contract and new architecture-aware tooling are not a published
+ARM64 release or an exercised0.3 feature result by themselves. Current actual
+environment research established native Linux AArch64 Docker on Apple Silicon
+(18 CPUs,16.8GB VM memory), with the immutable Rust1.99.1 arm64 image executing
+`aarch64`/`arm64`, rustc host `aarch64-unknown-linux-gnu` and glibc2.36.
+Its verbatim Rust library notice digest matched the supplied source notice.
+Native amd64 Docker on Ubuntu26.04.1 was independently reachable. Final0.3 ELF,
+package/tar/service-user receiver and source/SPDX gates still require an integrated
+exact0.3 source build; no old0.2 result is relabeled here.
+
+| Additional requested target | Actual inventory/access evidence | Remaining acceptance prerequisite |
+|---|---|---|
+| A second real Mac | Private inventory identifies additional M1 Max MacBook targets; an existing authenticated Darwin/arm64 shell runner is registered online/unpaused. One separately authorized bounded private metadata job never started and was canceled; no Mac command ran | Actual separately identified hardware/OS and a usable authorized native-client session; registration/presence is not execution or a print-dialog test |
+| Real iPhone | Existing network/phone metadata indicates devices, but no usable native print UI or exact current model/OS was exercised | An already trusted accessible real iPhone native print session; no pairing/permissions/new app was introduced |
+| Real iPad | Existing iPad inventory/network metadata, no usable native print UI/model/OS observation | An already trusted accessible physical iPad native print session; a simulator does not qualify |
+| Windows | Authorized VM/runner inventories produced no usable Windows native test environment; registered active executor metadata was Darwin/Linux | An authorized existing real Windows computer/VM and native print session; no new VM/driver or spoofed-client claim |
+| More real printer models / measured paper quality | Existing native destinations/queues resolve to the same Epson ET-16600; synthetic PPDs/receivers are explicitly synthetic | A separately identified real model with preexisting queue/driver; measured physical output requires separate approval and actual observations |
+
+These are scoped evidence prerequisites, not permanent assertions that the
+platforms are unreachable or incompatible. They block their own support/coverage
+claims, not reachable software implementation. No extra physical page, native
+queue/default change, device pairing or permission grant was made to fill the
+matrix. Private device identities, addresses, credentials and operator/job logs
+are not public release material.

@@ -4,6 +4,57 @@ All notable changes to Ferriprint are documented in this file. The format follow
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+This0.3 development cutover is not a new publication or an assertion that pending
+browser/native/package/hardware gates have passed. The immutable0.2.0 release is
+unchanged.
+
+### Changed
+
+- Move frontend accounts/roles/enabled state/explicit printer grants to private
+  managed `access.toml`, and active printer bindings to `printers.toml`; reject
+  legacy bootstrap users/printers rather than maintaining a shadow precedence.
+- Add explicit stopped-service `migrate-0.2`, protected exact credential-source
+  mapping for vanished systemd runtime paths, first-admin initialization and
+  lock-gated offline administrator recovery. Preserve job ownership/identity,
+  sequence/time origin, backend snapshots and existing defaults without replay.
+- Reserve usernames permanently and recheck current account/grant authority at
+  mutation/upload/pre-submission boundaries; protect the last enabled admin.
+
+### Added
+
+- Complete named recipe editing/validation/export through the shared resolver,
+  standard `job-presets-supported` collections and explicit-override precedence;
+  no invented preset request selector or universal native-dialog claim.
+- Browser account create/suspend/reactivate/role/password/printer-right controls
+  and current-password-verified own-password changes.
+- Full structured trusted-CUPS browser onboarding through queue/PPD inventory,
+  mappings/defaults/recipes/review and durable catalog/HTTP activation; share the
+  same explicit CLI validators/commit and report discovery state separately.
+- Persisted privacy-minimal operational conditions/outbox, actual fixed HTTPS
+  webhook transport, diagnostic delivery, bounded retries/recovery and explicit
+  retry of exhausted stable event IDs. Unknown paper readings are not shortages
+  or fabricated recoveries.
+- Native Linux amd64/arm64 release tooling with per-platform immutable compilers,
+  ELF architecture/native execution gates, architecture-specific tar/Debian/
+  manifests, byte-identical common source/SPDX and one checksum set/publisher.
+  Explicit pinned-container packaging needs no host `dpkg-deb` installation.
+- Actual-installed-executable package/tar acceptance tooling using real0.3
+  init/catalog/setup, nonroot service identity, an existing same-source native
+  loopback receiver, submission/known-ID cancellation/restart/ledger/source proof.
+  QA receiver binaries stay outside public product assets.
+
+### Documentation
+
+- Replace superseded account/setup commands with managed-state initialization,
+  import/recovery, trusted source/wizard/recipe/webhook contracts and operator
+  safety boundaries. Keep historical0.2 evidence clearly labeled.
+- Record concrete external second-Mac/iPhone/iPad/Windows/additional-printer/
+  physical-quality prerequisites separately from software implementation; online
+  registration, simulator fixtures and multiple queues for one device are not
+  native hardware coverage.
+
 ## [0.2.0] - 2026-10-27
 
 ### Changed

@@ -38,6 +38,14 @@ enum Command {
         #[command(subcommand)]
         command: UserCommand,
     },
+    /// Offline explicit import of legacy users/printers; never a runtime fallback.
+    #[command(name = "migrate-0.2")]
+    Migrate02 {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        credential_sources: Option<PathBuf>,
+    },
     /// Offline: discard an unknown-outcome job. It MAY STILL PRINT upstream.
     Abandon {
         job_id: i32,
@@ -47,6 +55,16 @@ enum Command {
 }
 #[derive(Subcommand)]
 enum UserCommand {
+    /// Initialize the sole managed administrator and empty printer catalog offline.
+    Init {
+        #[arg(long)]
+        username: String,
+    },
+    /// Offline administrator recovery under the service lock, never a web backdoor.
+    RecoverAdmin {
+        #[arg(long)]
+        username: String,
+    },
     /// Read a password from hidden terminal input or bounded stdin; refuse overwrite.
     PasswordHash {
         #[arg(long)]
@@ -63,13 +81,65 @@ async fn main() -> Result<()> {
         .init();
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Setup { command }) => return ferriprint::setup::run(command).await,
+        Some(Command::Setup { command }) => {
+            return ferriprint::setup::run(command, &cli.config).await;
+        }
         Some(Command::User {
             command: UserCommand::PasswordHash { output },
         }) => return ferriprint::auth::write_password_hash(&output),
+        Some(Command::Migrate02 {
+            output,
+            credential_sources,
+        }) => {
+            return ferriprint::managed::migrate_02(
+                &cli.config,
+                &output,
+                credential_sources.as_deref(),
+            );
+        }
         _ => {}
     }
-    let config = Config::load(&cli.config)?;
+    let config = if matches!(
+        &cli.command,
+        Some(Command::User {
+            command: UserCommand::Init { .. }
+        })
+    ) {
+        Config::load_bootstrap(&cli.config)?
+    } else {
+        Config::load(&cli.config)?
+    };
+    match &cli.command {
+        Some(Command::User {
+            command: UserCommand::Init { username },
+        }) => {
+            let password = ferriprint::auth::read_password()?;
+            ferriprint::managed::initialize(
+                &config,
+                username,
+                ferriprint::auth::password_hash(password.as_bytes())?,
+            )?;
+            println!(
+                "Initialized managed administrator and empty printer catalog; use authenticated browser onboarding or setup install."
+            );
+            return Ok(());
+        }
+        Some(Command::User {
+            command: UserCommand::RecoverAdmin { username },
+        }) => {
+            let password = ferriprint::auth::read_password()?;
+            ferriprint::managed::recover_administrator(
+                &config,
+                username,
+                ferriprint::auth::password_hash(password.as_bytes())?,
+            )?;
+            println!(
+                "Recovered the managed administrator offline. No job/spool/backend state changed."
+            );
+            return Ok(());
+        }
+        _ => {}
+    }
     if matches!(cli.command, Some(Command::Check)) {
         for printer in &config.printers {
             let settings = ProfileSettings::load(&config.profile_path(&printer.name))?;
@@ -144,7 +214,9 @@ async fn main() -> Result<()> {
         }
     };
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let scheduler = tokio::spawn(app.engine.clone().run(shutdown_rx));
+    let scheduler = tokio::spawn(app.engine.clone().run(shutdown_rx.clone()));
+    let mut notifications = tokio::spawn(app.clone().run_notifications(shutdown_rx));
+    let mut notifications_finished = false;
     tracing::info!(listen=%app.config.listen, "Ferriprint is accepting IPP connections");
     let result: Result<()> = tokio::select! {
         result = &mut server => result.context("HTTP server task failed").and_then(|result| result.context("HTTP server failed")),
@@ -153,6 +225,12 @@ async fn main() -> Result<()> {
             handle.graceful_shutdown(Some(Duration::from_secs(10)));
             let stopped = server.await.context("HTTP server task failed").and_then(|result| result.context("HTTP server failed"));
             signal.and(stopped)
+        },
+        outcome=&mut notifications=>{
+            notifications_finished=true;
+            handle.shutdown();
+            let _=server.await;
+            outcome.context("notification monitor panicked").and_then(|result|result).and_then(|()|Err(anyhow::anyhow!("notification monitor stopped unexpectedly")))
         },
         failure = async {
             if let Some(publisher) = discovery.as_mut() { publisher.failed().await }
@@ -168,6 +246,11 @@ async fn main() -> Result<()> {
     }
     let _ = shutdown_tx.send(true);
     scheduler.await.context("job scheduler panicked")??;
+    if !notifications_finished {
+        notifications
+            .await
+            .context("notification monitor panicked")??;
+    }
     result
 }
 async fn shutdown_signal() -> Result<()> {

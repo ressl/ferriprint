@@ -28,6 +28,10 @@ impl StagedFile {
             .mode(0o600)
             .open(&staged.temporary)
             .context("create managed temporary file")?;
+        anyhow::ensure!(
+            crate::auth::private_file_descriptor(&file)?,
+            "managed temporary file has an unsafe inherited ACL"
+        );
         file.write_all(contents)?;
         file.sync_all().context("sync managed temporary file")?;
         Ok(staged)

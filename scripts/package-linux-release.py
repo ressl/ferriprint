@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Robert Ressl
-"""Package an exact committed Linux amd64 build; never configure/start a service."""
+"""Package an exact native Linux amd64/arm64 build; never configure/start a service."""
 import argparse
 import gzip
 import hashlib
@@ -72,8 +72,14 @@ def main():
         raise SystemExit("build manifest commit/binary checksum mismatch")
     with binary.open("rb") as executable:
         header = executable.read(20)
-    if header[:5] != b"\x7fELF\x02" or int.from_bytes(header[18:20], "little") != 62:
-        raise SystemExit("package target must be ELF64 Linux x86_64")
+    if header[:6] != b"\x7fELF\x02\x01":
+        raise SystemExit("package target must be a little-endian ELF64 executable")
+    architecture = {62: "amd64", 183: "arm64"}.get(int.from_bytes(header[18:20], "little"))
+    if architecture is None:
+        raise SystemExit("package target must be Linux x86_64 or AArch64")
+    for expected in [f"architecture={architecture}\n", f"platform=linux/{architecture}\n", "native_execution=PASS\n"]:
+        if expected not in manifest:
+            raise SystemExit(f"build manifest lacks native architecture proof: {expected.strip()}")
     for required in ["ferriprint-source.tar.gz", "ferriprint.spdx.json"]:
         if not (build / required).is_file():
             raise SystemExit(f"missing release input: {required}")
@@ -106,7 +112,7 @@ def main():
         maintainer = package["authors"][0]
         if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
             raise SystemExit("unsupported package version")
-        stem = f"ferriprint-{version}-linux-amd64"
+        stem = f"ferriprint-{version}-linux-{architecture}"
         stage = work / "tar"
         (stage / "bin").mkdir(parents=True)
         shutil.copy2(binary, stage / "bin/ferriprint")
@@ -157,7 +163,7 @@ def main():
 Version: {debversion}
 Section: net
 Priority: optional
-Architecture: amd64
+Architecture: {architecture}
 Maintainer: {maintainer}
 Depends: libc6 (>= 2.36), libgcc-s1, ca-certificates, adduser
 Suggests: avahi-daemon
@@ -216,12 +222,12 @@ if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
 ''')
         postrm.chmod(0o755)
         environment = dict(os.environ, SOURCE_DATE_EPOCH=str(epoch))
-        subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(deb), str(out / f"ferriprint_{debversion}_amd64.deb")], env=environment, check=True)
-        for source_name, target_name in [("ferriprint-source.tar.gz", f"ferriprint-{version}-source.tar.gz"), ("ferriprint.spdx.json", f"ferriprint-{version}.spdx.json"), ("build-manifest.txt", f"ferriprint-{version}-build-manifest.txt")]:
+        subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(deb), str(out / f"ferriprint_{debversion}_{architecture}.deb")], env=environment, check=True)
+        for source_name, target_name in [("ferriprint-source.tar.gz", f"ferriprint-{version}-source.tar.gz"), ("ferriprint.spdx.json", f"ferriprint-{version}.spdx.json"), ("build-manifest.txt", f"ferriprint-{version}-linux-{architecture}-build-manifest.txt")]:
             shutil.copy2(build / source_name, out / target_name)
         assets = sorted(path for path in out.iterdir() if path.is_file())
         (out / "SHA256SUMS").write_text("".join(f"{digest(path)}  {path.name}\n" for path in assets))
-        print(json.dumps({"version": version, "commit": args.commit, "architecture": "amd64", "assets": [path.name for path in assets]}, indent=2))
+        print(json.dumps({"version": version, "commit": args.commit, "architecture": architecture, "assets": [path.name for path in assets]}, indent=2))
 
 
 if __name__ == "__main__":

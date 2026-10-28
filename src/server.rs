@@ -40,16 +40,25 @@ pub struct Printer {
 pub struct App {
     pub config: Config,
     pub engine: Arc<JobEngine>,
-    pub printers: HashMap<String, RwLock<Printer>>,
-    pub auth: Authenticator,
+    pub printers: parking_lot::RwLock<HashMap<String, Arc<RwLock<Printer>>>>,
+    pub auth: Arc<Authenticator>,
+    pub catalog: tokio::sync::Mutex<crate::managed::PrinterCatalog>,
+    pub onboarding: parking_lot::Mutex<HashMap<String, crate::onboarding::Draft>>,
+    pub notifications: Arc<crate::notifications::Notifications>,
+    pub discovery_status: parking_lot::RwLock<crate::discovery::PublicationStatus>,
     pub profile_changes: tokio::sync::watch::Sender<u64>,
 }
 impl App {
     /// Startup requires the authoritative profile and actual native queue formats.
     pub async fn open(config: Config) -> Result<Arc<Self>> {
         config.validate()?;
-        let auth = Authenticator::open(&config.access)?;
+        let catalog = crate::managed::load_catalog(&config)?;
         let engine = JobEngine::open(&config).await?;
+        let auth = engine.auth.clone();
+        let notifications = crate::notifications::Notifications::open(
+            config.notifications.as_ref(),
+            engine.clone(),
+        )?;
         let mut printers = HashMap::new();
         for printer in &config.printers {
             let profile_path = config.profile_path(&printer.name);
@@ -74,7 +83,7 @@ impl App {
             )?;
             printers.insert(
                 printer.name.clone(),
-                RwLock::new(Printer {
+                Arc::new(RwLock::new(Printer {
                     config: printer.clone(),
                     profile: Arc::new(profile),
                     upstream,
@@ -83,20 +92,165 @@ impl App {
                     telemetry,
                     revision: 0,
                     config_change_time,
-                }),
+                })),
             );
         }
         let (profile_changes, _) = tokio::sync::watch::channel(0);
+        let publication = crate::discovery::PublicationStatus::initial(config.discovery.is_some());
         Ok(Arc::new(Self {
             config,
             engine,
-            printers,
+            printers: parking_lot::RwLock::new(printers),
             auth,
+            catalog: tokio::sync::Mutex::new(catalog),
+            onboarding: parking_lot::Mutex::new(HashMap::new()),
+            notifications,
+            discovery_status: parking_lot::RwLock::new(publication),
             profile_changes,
         }))
     }
+    pub fn printer(&self, name: &str) -> Option<Arc<RwLock<Printer>>> {
+        self.printers.read().get(name).cloned()
+    }
+    pub fn printer_snapshot(&self) -> Vec<(String, Arc<RwLock<Printer>>)> {
+        self.printers
+            .read()
+            .iter()
+            .map(|(name, printer)| (name.clone(), printer.clone()))
+            .collect()
+    }
+    pub fn configuration_changed(&self) {
+        let mut publication = self.discovery_status.write();
+        let revision = (*self.profile_changes.borrow()).wrapping_add(1);
+        publication.revision = revision;
+        if self.config.discovery.is_some() {
+            publication.state = "pending".into();
+            publication.failure = None;
+        }
+        self.profile_changes.send_replace(revision);
+    }
+    pub async fn install_printer(
+        &self,
+        principal: &Principal,
+        prepared: crate::setup::PreparedPrinter,
+        expected_catalog_revision: u64,
+    ) -> Result<()> {
+        let mut catalog = self.catalog.lock().await;
+        anyhow::ensure!(
+            catalog.revision == expected_catalog_revision,
+            "catalog changed; inspect and review the wizard again"
+        );
+        let urf_supported = prepared
+            .profile
+            .urf_supported(&prepared.status.urf_supported)?;
+        let telemetry = Telemetry::open(
+            prepared.config.telemetry.as_ref(),
+            Duration::from_secs(self.config.backend_timeout_secs),
+        )?;
+        let name = prepared.config.name.clone();
+        let runtime = Arc::new(RwLock::new(Printer {
+            config: prepared.config.clone(),
+            profile: prepared.profile.clone(),
+            upstream: prepared.upstream.clone(),
+            urf_supported,
+            pwg_types: prepared.status.pwg_types.clone(),
+            telemetry,
+            revision: 0,
+            config_change_time: self.engine.uptime(),
+        }));
+        let mut next = self.printers.read().clone();
+        next.insert(name, runtime);
+        let committed = self.auth.with_access(principal, None, true, || {
+            let committed = crate::setup::commit(&self.config, &catalog, &prepared)?;
+            self.engine
+                .register_backend(&prepared.config, prepared.upstream.clone());
+            *self.printers.write() = next;
+            Ok(committed)
+        })?;
+        *catalog = committed.catalog;
+        self.configuration_changed();
+        committed.durability.context("Printer APPLIED and HTTP-active, but directory synchronization failed; crash durability unconfirmed. Discovery is separately supervised.")
+    }
+    pub async fn run_notifications(
+        self: Arc<Self>,
+        mut shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<()> {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _=interval.tick()=>{
+                    tokio::select! {
+                        result=self.notification_tick()=>result?,
+                        changed=shutdown.changed()=>{if changed.is_err()||*shutdown.borrow(){return Ok(());}}
+                    }
+                },
+                changed=shutdown.changed()=>{if changed.is_err()||*shutdown.borrow(){return Ok(());}}
+            }
+        }
+    }
+    async fn notification_tick(&self) -> Result<()> {
+        if !self.notifications.configured() {
+            return Ok(());
+        }
+        for (name, entry) in self.printer_snapshot() {
+            if !self.notifications.is_enabled(&name)? {
+                continue;
+            }
+            let (upstream, telemetry) = {
+                let printer = entry.read().await;
+                (printer.upstream.clone(), printer.telemetry.clone())
+            };
+            match upstream.inspect().await {
+                Ok(status) => {
+                    self.notifications.observe(
+                        &name,
+                        "native-queue-unreachable",
+                        Some(false),
+                        "native-queue",
+                    )?;
+                    let paper = (!status.reasons.is_empty())
+                        .then(|| reported_paper_shortage(&status.reasons));
+                    self.notifications
+                        .observe(&name, "paper-shortage", paper, "native-queue")?;
+                }
+                Err(_) => {
+                    self.notifications.observe(
+                        &name,
+                        "native-queue-unreachable",
+                        Some(true),
+                        "native-queue",
+                    )?;
+                }
+            }
+            let snapshot = telemetry.snapshot();
+            if snapshot.source.is_some() {
+                let unreachable = snapshot
+                    .last_error
+                    .as_ref()
+                    .map(|_| true)
+                    .or_else(|| snapshot.observed_at.map(|_| false));
+                self.notifications.observe(
+                    &name,
+                    "telemetry-source-unreachable",
+                    unreachable,
+                    "telemetry",
+                )?;
+                let paper = (snapshot.freshness == crate::telemetry::Freshness::Fresh
+                    && !snapshot.measurements.printer_state_reasons.is_empty())
+                .then(|| reported_paper_shortage(&snapshot.measurements.printer_state_reasons));
+                self.notifications
+                    .observe(&name, "paper-shortage", paper, "telemetry")?;
+            }
+        }
+        self.notifications.tick().await
+    }
     pub fn router(self: &Arc<Self>) -> Router {
         Router::new()
+            .merge(crate::accounts::router())
+            .merge(crate::onboarding::router())
+            .merge(crate::notification_admin::router())
+            .merge(crate::recipe_admin::router())
             .route("/", get(crate::admin::status_page))
             .route("/admin", get(crate::admin::admin_page))
             .route(
@@ -120,6 +274,19 @@ impl App {
             .layer(middleware::from_fn_with_state(self.clone(), access))
             .with_state(self.clone())
     }
+}
+fn reported_paper_shortage(reasons: &[String]) -> bool {
+    reasons.iter().any(|reason| {
+        matches!(
+            reason.as_str(),
+            "media-empty"
+                | "media-empty-warning"
+                | "media-empty-error"
+                | "media-needed"
+                | "media-needed-warning"
+                | "media-needed-error"
+        )
+    })
 }
 #[derive(Clone, Copy)]
 struct SourceAuthentication {
@@ -164,16 +331,7 @@ async fn access(State(app): State<Arc<App>>, mut request: Request, next: Next) -
             Err(_) => return authentication_required(),
         }
     } else if anonymous_allowed {
-        Some(Principal {
-            username: app
-                .config
-                .access
-                .anonymous_owner
-                .clone()
-                .expect("validated anonymous owner"),
-            role: crate::config::Role::User,
-            authenticated: false,
-        })
+        app.auth.anonymous()
     } else {
         None
     };
@@ -277,7 +435,7 @@ async fn ipp_handler(
     let Some(printer_name) = path.get("printer") else {
         return HttpStatus::NOT_FOUND.into_response();
     };
-    if !app.printers.contains_key(printer_name) {
+    if app.printer(printer_name).is_none() {
         return HttpStatus::NOT_FOUND.into_response();
     }
     let path_id = match path.get("id") {
@@ -424,9 +582,21 @@ async fn handle<R: AsyncRead + Unpin + Send>(
     }
     // This read lock spans resolution and durable job creation. Profile writers
     // hold the exclusive lock across the active-job gate and durable apply.
-    let printer = app.printers[printer_name].read().await;
+    let entry = app.printer(printer_name).context("printer disappeared")?;
+    let printer = entry.read().await;
     let g = DelimiterTag::OperationAttributes;
     let mut reply = protocol::response(request, ipp::model::StatusCode::SuccessfulOk)?;
+    if let Some(principal) = principal
+        && !app.auth.can_print(principal, printer_name)
+    {
+        return protocol::reject(
+            request,
+            Rejection::status(
+                ipp::model::StatusCode::ClientErrorNotAuthorized,
+                "Current printer permission required",
+            ),
+        );
+    }
     if op == 11 {
         let mut status = match printer.upstream.inspect().await {
             Ok(mut status) => {
@@ -502,14 +672,14 @@ async fn handle<R: AsyncRead + Unpin + Send>(
                 .unwrap_or("Untitled");
             let job = match app
                 .engine
-                .create_job(printer_name, owner, title, format, resolved)
+                .create_job(printer_name, principal, title, format, resolved)
                 .await
             {
                 Ok(job) => job,
                 Err(e) => return protocol::reject(request, engine_error(&e)),
             };
             let job = if op == 2 {
-                match app.engine.ingest_document(job.id, owner, reader).await {
+                match app.engine.ingest_document(job.id, principal, reader).await {
                     Ok(job) => job,
                     Err(e) => return protocol::reject(request, engine_error(&e)),
                 }
@@ -556,10 +726,14 @@ async fn handle<R: AsyncRead + Unpin + Send>(
                     ),
                 );
             }
-            if let Err(e) = app.engine.set_document_format(job.id, owner, format).await {
+            if let Err(e) = app
+                .engine
+                .set_document_format(job.id, principal, format)
+                .await
+            {
                 return protocol::reject(request, engine_error(&e));
             }
-            let job = match app.engine.ingest_document(job.id, owner, reader).await {
+            let job = match app.engine.ingest_document(job.id, principal, reader).await {
                 Ok(job) => job,
                 Err(e) => return protocol::reject(request, engine_error(&e)),
             };
@@ -576,7 +750,7 @@ async fn handle<R: AsyncRead + Unpin + Send>(
                 Ok(job) => job,
                 Err(e) => return protocol::reject(request, e),
             };
-            if !principal.can_access(&job.owner) {
+            if !app.auth.can_access(principal, &job.printer, &job.owner) {
                 return protocol::reject(
                     request,
                     Rejection::status(
@@ -586,7 +760,7 @@ async fn handle<R: AsyncRead + Unpin + Send>(
                 );
             }
             if op == 8 {
-                if let Err(e) = app.engine.cancel_job(job.id, &job.owner).await {
+                if let Err(e) = app.engine.cancel_job(job.id, principal).await {
                     return protocol::reject(request, engine_error(&e));
                 }
             } else {

@@ -58,6 +58,11 @@ A version tag `vVERSION`, binary, embedded `/source`, source asset, tar and Debi
 package all refer to the **same exact public commit**. The pinned-input manifest
 records its commit and tree. Complete docs/notices/scripts before the final build;
 a documentation change after building requires a new final exact-source build.
+For multiarchitecture releases, both native ELF binaries/tars/packages have
+architecture-specific manifests but the same public commit/tree and byte-identical
+source/SPDX. Different common bytes block publication; never silently choose one.
+The QA-only loopback receiver is not a release asset. Merge only reviewed expected
+assets into one final checksum set after both native package/runtime gates.
 Do not relabel an earlier binary with a newer source commit.
 
 Before publication run the Rust quality/security suite, actual isolated/browser/

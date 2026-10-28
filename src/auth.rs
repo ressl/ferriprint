@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Robert Ressl
 
-use crate::config::{AccessConfig, Role};
+use crate::config::{Config, Role};
 use anyhow::{Context, Result, ensure};
 use argon2::{
     Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
     password_hash::SaltString,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, BTreeSet},
     io::{IsTerminal, Read, Write},
     os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use subtle::ConstantTimeEq;
@@ -24,23 +26,83 @@ pub struct Principal {
     pub username: String,
     pub role: Role,
     pub authenticated: bool,
+    pub revision: u64,
+    csrf: String,
 }
 impl Principal {
     pub fn is_admin(&self) -> bool {
         self.authenticated && self.role == Role::Admin
     }
-    pub fn can_access(&self, owner: &str) -> bool {
-        self.is_admin() || self.username == owner
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Account {
+    pub role: Role,
+    pub enabled: bool,
+    pub password_hash: Arc<String>,
+    pub revision: u64,
+    #[serde(default)]
+    pub printers: BTreeSet<String>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AccessState {
+    pub schema_version: u32,
+    pub revision: u64,
+    pub accounts: BTreeMap<String, Account>,
+    #[serde(default)]
+    pub reserved: BTreeSet<String>,
+    #[serde(default)]
+    pub anonymous_printers: BTreeSet<String>,
+}
+impl AccessState {
+    pub fn validate(&self, anonymous_owner: Option<&str>) -> Result<()> {
+        ensure!(
+            self.schema_version == 1,
+            "unsupported managed access schema"
+        );
+        ensure!(
+            self.accounts.len() <= 64 && self.reserved.len() <= 65536,
+            "too many managed identities"
+        );
+        ensure!(
+            self.accounts
+                .values()
+                .any(|a| a.enabled && a.role == Role::Admin),
+            "at least one enabled administrator is required"
+        );
+        for (username, account) in &self.accounts {
+            crate::config::validate_principal(username)?;
+            ensure!(
+                Some(username.as_str()) != anonymous_owner && !self.reserved.contains(username),
+                "username is permanently reserved"
+            );
+            validate_hash(&account.password_hash)?;
+            validate_grants(&account.printers)?;
+        }
+        for username in &self.reserved {
+            crate::config::validate_principal(username)?;
+        }
+        validate_grants(&self.anonymous_printers)?;
+        Ok(())
     }
 }
-struct User {
-    hash: String,
-    role: Role,
-    csrf: String,
+fn validate_grants(grants: &BTreeSet<String>) -> Result<()> {
+    ensure!(grants.len() <= 1024, "too many printer grants");
+    for name in grants {
+        crate::config::validate_printer_name(name)?;
+    }
+    Ok(())
+}
+struct AuthState {
+    document: AccessState,
+    csrf: BTreeMap<String, String>,
 }
 pub struct Authenticator {
-    users: HashMap<String, Arc<User>>,
-    dummy: Arc<User>,
+    path: PathBuf,
+    anonymous_owner: Option<String>,
+    state: RwLock<AuthState>,
+    dummy_hash: Arc<String>,
     work: Arc<Semaphore>,
 }
 #[derive(Debug)]
@@ -48,7 +110,7 @@ pub enum AuthError {
     Invalid,
     Busy,
 }
-fn private_hash_file(file: &std::fs::File) -> Result<bool> {
+pub(crate) fn private_file_descriptor(file: &std::fs::File) -> Result<bool> {
     let metadata = file.metadata()?;
     // The file owner must not be able to replace credentials on behalf of a
     // different local account. Root and the service account are trusted writers.
@@ -162,44 +224,54 @@ fn private_linux_acl(file: &std::fs::File, service_uid: u32) -> bool {
     base == 15
 }
 
+/// Open the descriptor first, then verify effective privacy. No path exemption exists.
+pub fn read_private_file(path: &Path, limit: usize) -> Result<Vec<u8>> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .context("open private credential/state file")?;
+    ensure!(
+        private_file_descriptor(&file)?,
+        "credential/state file must be regular and accessible only to root and the service account"
+    );
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() <= limit,
+        "private credential/state file exceeds size limit"
+    );
+    Ok(bytes)
+}
+pub fn read_password_hash(path: &Path) -> Result<String> {
+    let bytes = read_private_file(path, 512)?;
+    let hash = std::str::from_utf8(&bytes)
+        .context("password hash must be UTF-8")?
+        .trim()
+        .to_owned();
+    validate_hash(&hash)?;
+    Ok(hash)
+}
 impl Authenticator {
-    pub fn open(config: &AccessConfig) -> Result<Self> {
-        let mut users = HashMap::new();
-        for user in &config.users {
-            let mut options = std::fs::OpenOptions::new();
-            options.read(true).custom_flags(libc::O_NOFOLLOW);
-            let file = options
-                .open(&user.password_hash_file)
-                .with_context(|| format!("open password hash for {}", user.username))?;
-            ensure!(
-                private_hash_file(&file)?,
-                "password hash for {} must be a regular file accessible only to root and the service account",
-                user.username
-            );
-            let mut hash = String::new();
-            file.take(513).read_to_string(&mut hash)?;
-            ensure!(hash.len() <= 512, "password hash file too large");
-            let hash = hash.trim().to_owned();
-            validate_hash(&hash)?;
-            users.insert(
-                user.username.clone(),
-                Arc::new(User {
-                    hash,
-                    role: user.role,
-                    csrf: uuid::Uuid::new_v4().to_string(),
-                }),
-            );
-        }
-        let dummy = Arc::new(User {
-            hash: password_hash(uuid::Uuid::new_v4().as_bytes())?,
-            role: Role::User,
-            csrf: String::new(),
-        });
-        Ok(Self {
-            users,
-            dummy,
+    pub fn open(config: &Config) -> Result<Arc<Self>> {
+        let path = config.state_dir.join("access.toml");
+        let bytes = read_private_file(&path, 1024 * 1024)
+            .context("open managed access; initialize or explicitly migrate-0.2 before serving")?;
+        let document: AccessState = toml::from_str(std::str::from_utf8(&bytes)?)
+            .map_err(|_| anyhow::anyhow!("invalid managed access syntax or account fields"))?;
+        document.validate(config.access.anonymous_owner.as_deref())?;
+        let csrf = document
+            .accounts
+            .keys()
+            .map(|name| (name.clone(), uuid::Uuid::new_v4().to_string()))
+            .collect();
+        Ok(Arc::new(Self {
+            path,
+            anonymous_owner: config.access.anonymous_owner.clone(),
+            state: RwLock::new(AuthState { document, csrf }),
+            dummy_hash: Arc::new(password_hash(uuid::Uuid::new_v4().as_bytes())?),
             work: Arc::new(Semaphore::new(4)),
-        })
+        }))
     }
     pub async fn authenticate(
         &self,
@@ -226,9 +298,18 @@ impl Authenticator {
         {
             return Err(AuthError::Invalid);
         }
-        let (known, user) = match self.users.get(username) {
-            Some(user) => (true, Arc::clone(user)),
-            None => (false, Arc::clone(&self.dummy)),
+        let (known, hash, role, revision, csrf) = {
+            let state = self.state.read();
+            match state.document.accounts.get(username) {
+                Some(user) if user.enabled => (
+                    true,
+                    Arc::clone(&user.password_hash),
+                    user.role,
+                    user.revision,
+                    state.csrf[username].clone(),
+                ),
+                _ => (false, self.dummy_hash.clone(), Role::User, 0, String::new()),
+            }
         };
         let username = username.to_owned();
         let permit = self
@@ -236,10 +317,9 @@ impl Authenticator {
             .clone()
             .try_acquire_owned()
             .map_err(|_| AuthError::Busy)?;
-        let role = user.role;
         let valid = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            PasswordHash::new(&user.hash).is_ok_and(|hash| {
+            PasswordHash::new(&hash).is_ok_and(|hash| {
                 Argon2::default()
                     .verify_password(&decoded[split + 1..], &hash)
                     .is_ok()
@@ -247,25 +327,296 @@ impl Authenticator {
         })
         .await
         .map_err(|_| AuthError::Invalid)?;
-        if !valid || !known {
-            return Err(AuthError::Invalid);
-        }
-        Ok(Principal {
+        let principal = Principal {
             username,
             role,
             authenticated: true,
+            revision,
+            csrf,
+        };
+        if !valid || !known || !self.current(&principal) {
+            return Err(AuthError::Invalid);
+        }
+        Ok(principal)
+    }
+    pub fn anonymous(&self) -> Option<Principal> {
+        Some(Principal {
+            username: self.anonymous_owner.clone()?,
+            role: Role::User,
+            authenticated: false,
+            revision: self.state.read().document.revision,
+            csrf: String::new(),
         })
     }
-    pub fn csrf(&self, principal: &Principal) -> Option<&str> {
-        if !principal.authenticated {
-            return None;
+    fn current_in(&self, state: &AuthState, principal: &Principal) -> bool {
+        if principal.authenticated {
+            state
+                .document
+                .accounts
+                .get(&principal.username)
+                .is_some_and(|a| {
+                    a.enabled && a.revision == principal.revision && a.role == principal.role
+                })
+        } else {
+            self.anonymous_owner.as_deref() == Some(&principal.username)
+                && principal.revision == state.document.revision
         }
-        self.users.get(&principal.username).map(|u| u.csrf.as_str())
+    }
+    fn allowed_in(&self, state: &AuthState, principal: &Principal, printer: &str) -> bool {
+        self.current_in(state, principal)
+            && if principal.authenticated {
+                principal.is_admin()
+                    || state.document.accounts[&principal.username]
+                        .printers
+                        .contains(printer)
+            } else {
+                state.document.anonymous_printers.contains(printer)
+            }
+    }
+    pub fn current(&self, principal: &Principal) -> bool {
+        self.current_in(&self.state.read(), principal)
+    }
+    pub fn can_print(&self, principal: &Principal, printer: &str) -> bool {
+        self.allowed_in(&self.state.read(), principal, printer)
+    }
+    pub fn can_access(&self, principal: &Principal, printer: &str, owner: &str) -> bool {
+        self.can_print(principal, printer) && (principal.is_admin() || principal.username == owner)
+    }
+    pub fn owner_allowed(&self, owner: &str, printer: &str) -> bool {
+        let state = self.state.read();
+        if self.anonymous_owner.as_deref() == Some(owner) {
+            return state.document.anonymous_printers.contains(printer);
+        }
+        state
+            .document
+            .accounts
+            .get(owner)
+            .is_some_and(|a| a.enabled && (a.role == Role::Admin || a.printers.contains(printer)))
+    }
+    /// Serialize a bounded local commit against account/grant revocation.
+    pub fn with_access<T>(
+        &self,
+        principal: &Principal,
+        printer: Option<&str>,
+        admin: bool,
+        commit: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let state = self.state.read();
+        ensure!(
+            self.current_in(&state, principal)
+                && (!admin || principal.is_admin())
+                && printer.is_none_or(|p| self.allowed_in(&state, principal, p)),
+            "not authorized: credentials or printer access changed"
+        );
+        commit()
+    }
+    pub fn with_owner_access<T>(
+        &self,
+        owner: &str,
+        printer: &str,
+        commit: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let state = self.state.read();
+        let allowed = if self.anonymous_owner.as_deref() == Some(owner) {
+            state.document.anonymous_printers.contains(printer)
+        } else {
+            state.document.accounts.get(owner).is_some_and(|a| {
+                a.enabled && (a.role == Role::Admin || a.printers.contains(printer))
+            })
+        };
+        ensure!(
+            allowed,
+            "not authorized: account disabled or printer access revoked"
+        );
+        commit()
+    }
+    pub fn csrf<'a>(&self, principal: &'a Principal) -> Option<&'a str> {
+        (principal.authenticated && self.current(principal)).then_some(principal.csrf.as_str())
     }
     pub fn verify_csrf(&self, principal: &Principal, token: &str) -> bool {
         self.csrf(principal)
             .is_some_and(|expected| bool::from(expected.as_bytes().ct_eq(token.as_bytes())))
     }
+    pub fn accounts(&self) -> Vec<AccountView> {
+        self.state
+            .read()
+            .document
+            .accounts
+            .iter()
+            .map(|(username, a)| AccountView {
+                username: username.clone(),
+                role: a.role,
+                enabled: a.enabled,
+                revision: a.revision,
+                printers: a.printers.clone(),
+            })
+            .collect()
+    }
+    pub fn anonymous_grants(&self) -> BTreeSet<String> {
+        self.state.read().document.anonymous_printers.clone()
+    }
+    fn install(
+        &self,
+        state: &mut AuthState,
+        mut next: AccessState,
+        changed: Option<&str>,
+    ) -> Result<()> {
+        next.revision = next
+            .revision
+            .checked_add(1)
+            .context("access revision exhausted")?;
+        next.validate(self.anonymous_owner.as_deref())?;
+        let contents = toml::to_string_pretty(&next)?;
+        ensure!(
+            contents.len() <= 1024 * 1024,
+            "managed access exceeds size limit"
+        );
+        let durability =
+            crate::storage::StagedFile::new(&self.path, contents.as_bytes())?.install()?;
+        state.document = next;
+        if let Some(name) = changed {
+            state
+                .csrf
+                .insert(name.to_owned(), uuid::Uuid::new_v4().to_string());
+        }
+        durability.context(
+            "Access APPLIED but directory synchronization failed; crash durability unconfirmed",
+        )
+    }
+    pub fn create_account(
+        &self,
+        actor: &Principal,
+        username: &str,
+        role: Role,
+        hash: String,
+        printers: BTreeSet<String>,
+    ) -> Result<()> {
+        crate::config::validate_principal(username)?;
+        validate_hash(&hash)?;
+        let mut state = self.state.write();
+        ensure!(
+            self.current_in(&state, actor) && actor.is_admin(),
+            "current administrator required"
+        );
+        ensure!(
+            !state.document.accounts.contains_key(username)
+                && !state.document.reserved.contains(username)
+                && self.anonymous_owner.as_deref() != Some(username),
+            "username exists or is permanently reserved"
+        );
+        let mut next = state.document.clone();
+        next.accounts.insert(
+            username.into(),
+            Account {
+                role,
+                enabled: true,
+                password_hash: hash.into(),
+                revision: 1,
+                printers,
+            },
+        );
+        self.install(&mut state, next, Some(username))
+    }
+    pub fn update_account(
+        &self,
+        actor: &Principal,
+        username: &str,
+        update: AccountUpdate,
+    ) -> Result<()> {
+        let AccountUpdate {
+            revision,
+            role,
+            enabled,
+            printers,
+            hash,
+        } = update;
+        let mut state = self.state.write();
+        ensure!(
+            self.current_in(&state, actor) && actor.is_admin(),
+            "current administrator required"
+        );
+        let mut next = state.document.clone();
+        let account = next
+            .accounts
+            .get_mut(username)
+            .context("account not found")?;
+        ensure!(
+            account.revision == revision,
+            "account changed; reload before editing"
+        );
+        account.role = role;
+        account.enabled = enabled;
+        account.printers = printers;
+        account.revision = account
+            .revision
+            .checked_add(1)
+            .context("account revision exhausted")?;
+        if let Some(hash) = hash {
+            validate_hash(&hash)?;
+            account.password_hash = hash.into();
+        }
+        self.install(&mut state, next, Some(username))
+    }
+    pub fn change_password(&self, actor: &Principal, hash: String) -> Result<()> {
+        validate_hash(&hash)?;
+        let mut state = self.state.write();
+        ensure!(
+            actor.authenticated && self.current_in(&state, actor),
+            "current account required"
+        );
+        let mut next = state.document.clone();
+        let account = next
+            .accounts
+            .get_mut(&actor.username)
+            .context("account not found")?;
+        account.password_hash = hash.into();
+        account.revision = account
+            .revision
+            .checked_add(1)
+            .context("account revision exhausted")?;
+        self.install(&mut state, next, Some(&actor.username))
+    }
+    pub fn set_anonymous_grants(
+        &self,
+        actor: &Principal,
+        printers: BTreeSet<String>,
+    ) -> Result<()> {
+        let mut state = self.state.write();
+        ensure!(
+            self.current_in(&state, actor) && actor.is_admin(),
+            "current administrator required"
+        );
+        let mut next = state.document.clone();
+        next.anonymous_printers = printers;
+        self.install(&mut state, next, None)
+    }
+    pub async fn hash_password(&self, password: Zeroizing<String>) -> Result<String> {
+        let permit = self
+            .work
+            .clone()
+            .try_acquire_owned()
+            .context("password hashing capacity reached")?;
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            password_hash(password.as_bytes())
+        })
+        .await?
+    }
+}
+pub struct AccountUpdate {
+    pub revision: u64,
+    pub role: Role,
+    pub enabled: bool,
+    pub printers: BTreeSet<String>,
+    pub hash: Option<String>,
+}
+#[derive(Serialize)]
+pub struct AccountView {
+    pub username: String,
+    pub role: Role,
+    pub enabled: bool,
+    pub revision: u64,
+    pub printers: BTreeSet<String>,
 }
 fn validate_hash(value: &str) -> Result<()> {
     let hash =
@@ -307,7 +658,7 @@ pub fn password_hash(password: &[u8]) -> Result<String> {
         .to_string())
 }
 /// No password argument exists. Terminal input is hidden; redirected input is bounded.
-pub fn write_password_hash(output: &Path) -> Result<()> {
+pub fn read_password() -> Result<Zeroizing<String>> {
     let password = if std::io::stdin().is_terminal() {
         let password = Zeroizing::new(rpassword::prompt_password("New Ferriprint password: ")?);
         let confirm = Zeroizing::new(rpassword::prompt_password("Repeat password: ")?);
@@ -329,6 +680,10 @@ pub fn write_password_hash(output: &Path) -> Result<()> {
         std::str::from_utf8(&bytes).context("password input must be UTF-8")?;
         Zeroizing::new(String::from_utf8(std::mem::take(&mut *bytes)).expect("validated UTF-8"))
     };
+    Ok(password)
+}
+pub fn write_password_hash(output: &Path) -> Result<()> {
+    let password = read_password()?;
     let hash = password_hash(password.as_bytes())?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -336,10 +691,12 @@ pub fn write_password_hash(output: &Path) -> Result<()> {
         .mode(0o600)
         .open(output)
         .context("create password hash (refuses overwrite)")?;
+    ensure!(
+        private_file_descriptor(&file)?,
+        "new password hash file has an unsafe inherited ACL; no PHC written"
+    );
     writeln!(file, "{hash}")?;
     file.sync_all()?;
-    println!(
-        "Created owner-only Argon2id password hash; configure its protected path in access.users."
-    );
+    println!("Created owner-only Argon2id password hash for explicit offline credential import.");
     Ok(())
 }
