@@ -213,7 +213,7 @@ def main():
         state = root / "state"
         state.mkdir(mode=0o700)
         config = root / "ferriprint.toml"
-        config.write_text(f'listen = "127.0.0.1:{FRONTEND_PORT}"\npublic_url = "ipp://127.0.0.1:{FRONTEND_PORT}/"\nstate_dir = "{state}"\npoll_interval_ms = 100\nbackend_timeout_secs = 5\n[[cups_sources]]\nid = "isolated"\nserver_uri = "ipp://127.0.0.1:{RECEIVER_PORT}/"\nusername = "ferriprint"\n')
+        config.write_text(f'listen = "127.0.0.1:{FRONTEND_PORT}"\npublic_url = "ipp://127.0.0.1:{FRONTEND_PORT}/"\nstate_dir = "{state}"\npoll_interval_ms = 100\nbackend_timeout_secs = 5\n[access]\nanonymous_trusted_lan = false\n[[cups_sources]]\nid = "isolated"\nserver_uri = "ipp://127.0.0.1:{RECEIVER_PORT}/"\nusername = "ferriprint"\n')
         config.chmod(0o600)
         choices = root / "choices.toml"
         lines = ["confirmed_native_mappings = true", "[settings]"]
