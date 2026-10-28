@@ -119,9 +119,10 @@ class Client:
         self.sequence += 1
         uri = RECEIVER_URI if upstream else FRONTEND_URI
         operations = [(0x47, "attributes-charset", "utf-8"), (0x48, "attributes-natural-language", "en"),
-                      (0x45, "printer-uri", uri), (0x42, "requesting-user-name", "admin")]
+                      (0x45, "printer-uri", uri)]
         if job_id is not None:
             operations.append((0x21, "job-id", job_id))
+        operations.append((0x42, "requesting-user-name", "admin"))
         if operation in {2, 4}:
             operations.extend([(0x49, "document-format", "application/pdf"), (0x42, "job-name", "native package nonprinting acceptance")])
         if operation == 11:
