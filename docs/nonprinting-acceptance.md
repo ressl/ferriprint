@@ -170,8 +170,9 @@ browser flows above or claim additional physical clients/printers.
 
 ## Observed0.3 native CUPS recipe application
 
-The unreleased `fe2611a421241ea3501ee84a2537a95e04619dc1` candidate was
-exercised in a disposable native Linux amd64 Debian12 container with real
+This historical pre-publication exercise used candidate
+`fe2611a421241ea3501ee84a2537a95e04619dc1`, not the published503/135 source.
+It ran in a disposable native Linux amd64 Debian12 container with real
 CUPS2.4.2-3+deb12u9 and cups-filters1.28.17-3+deb12u2. No host CUPS socket,
 physical backend, published port or host queue was involved. The native daemon,
 frontend and existing Rust receiver listened only on literal loopback addresses.
@@ -211,3 +212,70 @@ produced exactly one received-document ledger entry. The owned local CUPS job
 was then canceled for cleanup. These are observed software transformations and
 nonprinting delivery, not a physical orientation/edge/color/quality measurement,
 a native GUI/preset-visibility result or a second real printer/model.
+
+## Post-release checks without submission (2026-10-28)
+
+These later checks are metadata/settings-only. They do not reuse historical
+one-job or cancellation authority and create no document or Print/Create/Send/
+Cancel request. Their [dated compatibility matrix](compatibility.md#post-release-native-client-observations-2026-10-28)
+separates the following layers:
+
+1. Server GPA and recipe collections describe what Ferriprint exposes.
+2. Generated native CUPS/driver capabilities describe what the actual new local
+   destination consumed; copied server attributes are not a substitute.
+3. A merged native ticket or strict nonspooling Validate proves only its actual
+   settings at that boundary, not an emitted Print ticket.
+4. Visible native controls and an actual own modal window are distinct from
+   full preset selection, native IPP login and physical output.
+
+On the physical macOS27.0.1 client, fresh Default/Add/automatic Use and an actual
+panel displayed all three site recipes and manual A3-zero/Best/duplex controls.
+Selecting the A3 recipe changed quality/sides while Paper Size remainedA4 and
+Paper Handling destination was disabled. No complete A3 GUI job ticket was
+produced and no root cause is attributed. Checked printing-domain exports,
+queue URIs, defaults and options were restored, not all volatile global OS state.
+
+The independent [hosted Mac run40713530309](https://github.com/ressl/ferriprint/actions/runs/40713530309)
+used native macOS15.7.9 on `VirtualMac2,1` / virtual M1 and a source-built Mach-O
+from unchanged503. Actual local CUPS generated A3 29700x42000/all margins0,
+High5 and both duplex modes; a fresh ordinary user separately passed native GPA
+and three strict Validate requests. Frontend/native jobs, spool and measured
+refused operations stayed0, with owned queue/process/state cleanup and closed
+listeners. The original `GUI_NOT_PROVEN` report is retained alongside the
+separate exact own-modal facts; its `na-letter` panel state is not A3 GUI proof.
+Neither this VM nor its QA-only Cargo receiver copy is a product distribution
+or another physical device.
+
+The [Windows native run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761)
+proved the absolute-helper guard, exact public version, real managed init/runtime
+and separate HTTP administrator/ordinary-user roles. Native Add automatically
+selected Microsoft IPP Class Driver, but the full native settings gate failed:
+its actual capability XML lacked A3, quality and duplex, and validated A4 tickets
+did not preserve required quality/duplex or bordered imageable areas.
+`NoConflict` alone is not settings preservation. The separately captured direct
+frontend GPA is not evidence of the driver's actual requests or responses.
+Native jobs, frontend ledger and refused operations were measured zero; owned
+cleanup and original queue/default/inbox-driver preservation passed. Frontend
+filesystem spool count was not separately measured. Anonymous loopback IPP
+functionality is distinct from the HTTP role checks and proves neither native
+IPP authentication nor TLS. Earlier unknown errors remain unknown; the later
+bare-helper execution error was corrected without a measured PATH claim.
+The native failure remains agent-actionable diagnosis, not a platform verdict.
+
+The later [bounded observation40783698573](https://github.com/ressl/ferriprint/actions/runs/40783698573)
+again passed version/init/runtime/HTTP roles, but its initial all-thread
+attachment was followed by `THREAD_COVERAGE_LOST`. No public-GPA canary was
+decoded/validated, so the guard prevented native Add/capability collection.
+The offending thread/state snapshot was not retained; thread exit, ptrace
+behavior or another loss mechanism is not established. Incomplete coverage and
+zero decoded bytes prove neither no request nor no future/asynchronous request.
+Detach, measured native/ledger/refused-operation zeros and owned cleanup passed.
+This does not replace the preceding actual native settings failure or prove a
+Windows/product incompatibility, client response consumption or an original fix.
+
+A metadata-only receiver's fixed `jobs=[]` / `document_bytes=0` fields are design
+invariants, not independently measured document counters. Real native/frontend
+ledgers, spool state and refused-operation counts are recorded separately.
+Unknown/nonzero runtime state prevents owned teardown and acceptance; preserve
+the fixture without exporting jobs/credentials or canceling/retrying anything.
+Cleanup of owned resources is separate from provider-managed VM disposal.

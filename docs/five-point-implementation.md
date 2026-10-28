@@ -1,6 +1,6 @@
 # Ferriprint 0.3: five-point implementation and acceptance plan
 
-Status: design approved before feature implementation; all five software workstreams are implemented and have exercised acceptance evidence recorded below. Native GUI behavior and unavailable additional hardware coverage remain explicitly separate from software/native-library acceptance. The existing native CUPS queue and its installed driver remain the renderer. This document does not authorize publication, production deployment, a new native queue on an operator's computer, or a physical print; those require the coordinating operator's separate gates.
+Status: all five software workstreams are implemented and **v0.3.0 was published on 2026-10-28**. The earlier integrated acceptance below is a historical pre-publication checkpoint, not the current release or desktop-access status. Later native-client observations distinguish generated consumer capabilities, GUI controls, authentication and unavailable physical measurements. The existing native CUPS queue/driver remains the renderer. This document grants no new publication, live-installation mutation, operator-native-queue or physical-print authority; those require separate coordinating gates.
 
 ## Baseline and implementation boundaries
 
@@ -150,6 +150,11 @@ Completion requires every reachable implementation and every named end-to-end ac
 
 ## Observed integrated acceptance — 2026-10-28
 
+**Historical pre-publication checkpoint.** The original source/build and
+isolated submission/cancellation observations below retain their own scope.
+Then-pending publication and locked-session statements are not current release
+or access claims, and the consumed one-job authority is not renewed.
+
 The implemented version is 0.3.0. The integrated macOS gate passed all 83 tests, `cargo fmt --all -- --check`, and `cargo clippy --locked --all-targets -- -D warnings`; the final test command was `cargo test --locked --all-targets`. The separate privileged Linux migration case was actually executed on both native AMD64 and AArch64, not merely left ignored: protected output remained root-owned, service-readable and not service-writable. The offline migration fixture imported explicit persistent PHC sources while the old runtime credential paths were absent, preserved the existing job ledger and owners, and produced no replay. Actual CLI failures also proved inline-PHC parsing errors do not disclose the secret. Missing catalog state failed, while explicit initialization created a valid empty catalog that supported authenticated onboarding.
 
 The real browser completed the entire empty-catalog wizard against an existing isolated CUPS-protocol queue: trusted inventory, private PPD acquisition, native mappings, defaults, all three complete recipes, resolved review and authoritative commit. No per-printer TOML editing or native print was needed. The equivalent actual executable setup path acquired the same trusted queue and committed a usable printer. HTTP-active state was distinguished from disabled or separately established discovery; no pending advertisement was presented as published.
@@ -165,6 +170,49 @@ Standard preset collections were observed through actual native IPP Get-Printer-
 
 The macOS native-library proof added no local queue and left all three existing queue URIs, both default scopes, exact `lpoptions` bytes/checksum and printing preferences unchanged. It is not a native GUI installation or dropdown proof. The actual desktop was locked and System Settings exposed no window despite authorized native opening and valid Accessibility permission. No OS-login secret was sought, no unlock/security bypass was attempted, and absence of that window was not called unsupported preset behavior. Actual Default/Add/Use and Print-dialog preset visibility require a user-unlocked desktop; any subsequent dialog must be canceled, and the already consumed one-job authorization must not be reused.
 
-The release workstream actually built and exercised native Linux AMD64 and AArch64 artifacts. Debian and Ubuntu installation/runtime gates passed for both Debian-package and tar payloads on both architectures, rather than treating cross-compilation or CI configuration as execution evidence. Source, notices, executable identity and package manifests remain exact-source release gates. Final documentation/source-offer builds, publication and any production cutover still require the coordinating operator's explicit approval.
+At that pre-publication checkpoint, the release workstream had built and exercised native Linux AMD64 and AArch64 artifacts. Debian and Ubuntu installation/runtime gates passed for package and tar payloads on both architectures, not cross-compilation alone. Final documentation/source-offer builds, publication and any production cutover then still required the coordinating operator's explicit approval.
 
-All observations above used isolated nonprinting receivers or disposable CUPS environments. No 0.3 production deployment or physical print occurred. Additional physical printers, iOS/Windows native clients and another authorized native desktop remain concrete availability/consent prerequisites for their own compatibility claims; none is represented by a synthetic fixture or blanket certification.
+All observations in that checkpoint used isolated nonprinting receivers or disposable CUPS environments; no0.3 production deployment or physical print occurred during it. Additional physical printers, iOS/Windows native clients and another authorized native desktop were then unexercised prerequisites, not synthetic or blanket-certification results. Later observations follow separately.
+
+## Post-release publication and client follow-up (2026-10-28)
+
+The [actual sole publisher](https://github.com/ressl/ferriprint/actions/runs/40622950886)
+published immutable503 source and the common135 source archive as v0.3.0.
+Both native architectures and eight actual installed Debian/Ubuntu package/tar
+runtimes passed; [all nine downloaded asset identities](release-and-installation.md#observed-release-030)
+were verified. Later documentation-only commits do not retag/rebuild or relabel
+those released assets.
+
+The [current native-client observations](compatibility.md#post-release-native-client-observations-2026-10-28)
+add actual fresh Default/Add/automatic Use and three visible site recipes on
+physical macOS27.0.1. Manual A3-zero/Best/duplex controls were observed, but
+selecting the A3 recipe left Paper SizeA4 and a disabled Paper Handling
+destination; no complete A3 GUI ticket or physical result is claimed.
+
+Independent hosted native macOS15.7.9/virtual M1 passed actual generated local
+CUPS A3-zero/High5/both-duplex semantics and three fresh ordinary-user strict
+Validate requests, with measured zero jobs/spool/refused operations and cleanup.
+The immutable `GUI_NOT_PROVEN` label and separate exact own-modal observation
+remain distinct; neither establishes full presets/A3 GUI, Print authentication,
+a second physical Mac or operational macOS server support.
+
+Hosted Windows run40769440761 proved the reviewed absolute-helper correction,
+real managed init/runtime and HTTP roles. Automatic Microsoft IPP Class Driver
+Add reached the full native settings gate, which failed: actual capability XML
+lacked A3/quality/duplex, and validated A4 tickets did not preserve required
+quality/duplex or bordered imageable areas. Measured native jobs/frontend
+ledger/refused operations were zero and owned cleanup passed; native IPP
+authentication/TLS and filesystem spool counts were not proved. Source/retained-
+capability diagnosis remains agent-actionable, without an unsupported-platform
+verdict, guessed fix or weakened acceptance. Earlier unknown errors retain their
+own history. Real iPhone/iPad sessions, another physical model and measured
+stock/output separately need the matrix's access/handling prerequisites;
+none authorizes a physical print.
+
+Later bounded observation40783698573 passed runtime/roles but stopped at
+`THREAD_COVERAGE_LOST` after an initial all-thread attachment snapshot, before
+a validated public-GPA canary or native Add. Detach and measured native/ledger/
+refused zeros/owned cleanup passed. The missing coverage-loss thread/state
+snapshot remains agent-actionable; zero decoded bytes under incomplete coverage
+cannot establish no request, no future/asynchronous request or a platform cause.
+The earlier full native settings failure remains the last actual native result.

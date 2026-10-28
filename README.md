@@ -10,11 +10,13 @@ configure CUPS queues or bundle proprietary PPDs. Native CUPS and its independen
 installed driver remain the renderer. Ferriprint is AGPL-3.0-only and is not
 certified by Apple, a printer vendor or an IPP certification program.
 
-**0.3 development:** this checkout uses explicit managed accounts/catalogs and the
-[five-point implementation contract](docs/five-point-implementation.md). It is not
-a newly published release or a hardware-certification claim. Use the documentation
-in the immutable0.2.0 tag for that released executable; migrate explicitly before
-running a0.3 executable against0.2 state.
+**Current release: Ferriprint 0.3.0**, published on 2026-10-28 for native Linux
+amd64 and arm64 as tar archives and Debian packages. Its immutable source is
+`503a7b90bc38a5d8b6917788ff7e237b2e684216`; the
+[five-point implementation contract](docs/five-point-implementation.md) describes
+its managed accounts/catalogs and other additions. This is not hardware
+certification. Existing0.2 state requires the explicit stopped migration before
+running0.3; the immutable0.2 documentation remains historical.
 
 The five additions are complete named recipes, browser account/password/printer
 rights, a persisted operational webhook outbox, browser onboarding of existing
@@ -57,13 +59,15 @@ package-installation proof.
 
 ## Installation
 
-**Released:** [Ferriprint0.2.0](https://github.com/ressl/ferriprint/releases/tag/v0.2.0).
-Its immutable source is commit `24ccd15668502e24854cdaea87b4500c8e767554`;
-the release workflow exercised Linux quality/source checks and both Debian12 and
-Ubuntu26.04.1 package/tar installations before publishing. Downloaded release
-bytes, the embedded source and a controlled nonprinting deployment were verified.
-See the [exact release evidence](docs/release-and-installation.md#observed-release-020).
-Later documentation commits do not relabel that tag or the running source offer.
+**Released:** [Ferriprint 0.3.0](https://github.com/ressl/ferriprint/releases/tag/v0.3.0).
+The immutable release commit is `503a7b90bc38a5d8b6917788ff7e237b2e684216`.
+The actual publisher passed both native architectures and eight installed
+package/tar runtimes across Debian12 and Ubuntu26.04.1. All nine downloaded
+assets, both ELF identities and the common embedded source were verified.
+See the [exact release evidence](docs/release-and-installation.md#observed-release-030)
+and [dated native-client observations](docs/compatibility.md#post-release-native-client-observations-2026-10-28).
+Later documentation-only descendants do not retag the release, replace its assets
+or relabel its embedded source.
 
 See [versioned installation and provenance](docs/release-and-installation.md) for
 release assets, checksums, tar/`.deb`, strict systemd unit, manual and examples.

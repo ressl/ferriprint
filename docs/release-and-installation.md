@@ -9,8 +9,9 @@ Ferriprint never configures that queue or installs a vendor driver.
 See [compatibility](compatibility.md) for **observed** platforms and limitations,
 [the0.3 contract](five-point-implementation.md) for current release gates and
 [the isolated deployment guide](linux-pilot.md) for operational safeguards.
-The latest published version remains0.2.0; the0.3 architecture-aware asset
-contract below is not a statement that an ARM64 release has already been published.
+The latest published release is **0.3.0**, published on 2026-10-28 for native
+Linux amd64 and arm64. Its exact source and downloaded asset identities are below;
+the0.2.0 observations remain explicitly historical.
 
 ## Assets and verification
 
@@ -63,7 +64,53 @@ compiler; when changing that compiler, update the notice from that exact image,
 not an unrelated current web version. No proprietary driver/PPD is substituted
 for these open-source runtime notices.
 
+## Observed release 0.3.0
+
+- [Immutable release and downloads](https://github.com/ressl/ferriprint/releases/tag/v0.3.0),
+  published2026-10-28T02:57:48Z, not a draft or prerelease.
+- [Actual successful sole publisher](https://github.com/ressl/ferriprint/actions/runs/40622950886).
+- Source commit `503a7b90bc38a5d8b6917788ff7e237b2e684216`, tree
+  `002c5ef02e9a31596eabf8a8716530640c59b7f1`; annotated tag object
+  `f2963390bf48efeb171dc13aca849b0f984d9b40`.
+- Both native distribution jobs passed Debian12 and Ubuntu26.04.1 package/tar
+  gates: eight actual installed nonroot runtimes, not cross-compilation alone.
+  These used the real0.3 init/catalog/setup interfaces and isolated receiver.
+
+| Actual downloaded asset | SHA256 |
+| --- | --- |
+| `ferriprint-0.3.0-linux-amd64-build-manifest.txt` | `d8490ad6cce10e7ad99fddea3cd1f5f3fe7f3d8220eb2af76dd6d50ff96c161e` |
+| `ferriprint-0.3.0-linux-amd64.tar.gz` | `ecc0ed1610e3697a982403c2aba3e31d021347d754bd04122a110610b9e81b32` |
+| `ferriprint-0.3.0-linux-arm64-build-manifest.txt` | `74e7a3bc19b7aa49fe6e0f174571004a96f21b6cacd8a9c0283ca50f396e15f4` |
+| `ferriprint-0.3.0-linux-arm64.tar.gz` | `1d0280e239d8a122a5111f8068b96d3b147d70adcf5b6f4fb391e0e7be8cb712` |
+| `ferriprint-0.3.0-source.tar.gz` | `135ea616c34a10ed823461712f43d926a6e6dce12fdded96c59bf8830b2c4b1b` |
+| `ferriprint-0.3.0.spdx.json` | `1990fad06b69804692ccd77470648aca16af45d72ed3c9a0f8e441f3070746ad` |
+| `ferriprint_0.3.0-1_amd64.deb` | `b88993b87758a1be78f699cc972cdc9869ecfb562ee2bfc0176f08a07bd246d4` |
+| `ferriprint_0.3.0-1_arm64.deb` | `7d9d22bf5a1fa82bce5d2ed70cd8c0141e6951c9ccf335c877fc3fb053749a2d` |
+| `SHA256SUMS` | `eb03ce37a00595035738ae3741498d2b502d56090af2c0fc578cf79e6cc021b6` |
+
+All nine actual downloads matched the uploaded digests; `SHA256SUMS` covers the
+eight other files, not itself. The extracted tar and Debian executables agreed:
+
+| Native executable | ELF machine | Actual SHA256 |
+| --- | --- | --- |
+| amd64 / x86_64 |62 | `473767d296f1cc2f86d0f84312da31f4aa031e195437ef7f5d348ad3f5e0bee6` |
+| arm64 / AArch64 |183 | `ab82391ab7906baa874b98eae048802fd9046aba80a19444da832d3cb00fbd30` |
+
+Both executables embedded the same72-member archive, byte-for-byte equal to the
+tagged source and separately downloaded `135ea616…b2c4b1b` source asset above.
+The common SPDX records all281 locked registry packages, not just runtime linkage.
+The publisher also passed both native quality/MSRV/source/privacy gates. Pinned
+inputs and exact download identity are not a general byte-reproducibility claim.
+
+At publication, both providers' source/tag and the private nine-file release
+mirror were observed byte-identical. A later GitHub documentation update is not
+proof of a new GitLab sync. Documentation-only descendants record later
+observations without retagging0.3.0, replacing its assets or claiming their new
+documentation belongs to the immutable release source archive.
+
 ## Observed release 0.2.0
+
+Historical release checkpoint: **2026-10-27**.
 
 - [Immutable release and downloads](https://github.com/ressl/ferriprint/releases/tag/v0.2.0).
 - [Actual successful gated publisher](https://github.com/ressl/ferriprint/actions/runs/40594946394).
@@ -286,8 +333,10 @@ Public source and contributions use
 and retains its historical branches. The public lineage starts at a reviewed
 sanitized **new root commit**, not a rewritten private history. The first release
 uses an ordinary clean public descendant that corrected the observed container
-checkout-ownership CI boundary. `public-development` and immutable version tags
-are mirrored on both remotes; future work never merges old private parents.
+checkout-ownership CI boundary. Both destinations are intended to receive this
+same reviewed lineage; report each provider's actually observed ref and release
+copy separately. An unavailable mirror stays pending without a transport or
+authentication bypass. Future work never merges old private parents.
 
 The export tree must be byte-identical to the reviewed final private tree. Its
 **public** commit is the build/source/tag input; the private predecessor and shared

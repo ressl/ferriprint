@@ -2,8 +2,10 @@
 
 Ferriprint's public development branch is `public-development` at
 <https://github.com/ressl/ferriprint>. The canonical GitLab repository remains
-private; its corresponding `public-development` branch and version tags contain
-the **same public commits**, not a merge of the old private pilot history.
+private. Both destinations are intended to receive the **same reviewed public
+lineage**, never a merge of the old private pilot history. Record the exact
+observed ref separately for each provider; a successful GitHub push does not
+establish a new GitLab sync.
 
 The initial public branch is a new root commit of the exact reviewed sanitized
 source tree. The former private `main` history is preserved, not rewritten,
@@ -37,10 +39,13 @@ are deliberately not imported into the public commit graph or source archive.
 - Start public feature branches from `public-development` and merge public changes
   back into that clean branch. Keep the local checkout and repository default on
   `public-development` where access permits.
-- Keep a clearly named public GitHub remote and canonical GitLab remote; push the
-  same reviewed public branch/tag to both. Check the intended remote destination
-  before pushing. A repository being private today does not make its source safe
-  to merge publicly tomorrow.
+- Keep a clearly named public GitHub remote and canonical GitLab remote. Check
+  the intended destination and push only the approved public branch/tag. Record
+  each provider's actual resulting ref, rather than inferring mirror success.
+  If an approved mirror is unavailable, retain its pending commit and respect
+  the transport/authentication boundary; do not bypass policy to claim sync.
+  A repository being private today does not make its source safe to merge
+  publicly tomorrow.
 - Do **not** merge the historical private `main` branch or another private-parent
   branch into public development. If an old public-safe change must be carried
   forward, review its content and recreate/cherry-pick that isolated change onto
@@ -56,14 +61,20 @@ are deliberately not imported into the public commit graph or source archive.
 
 A version tag `vVERSION`, binary, embedded `/source`, source asset, tar and Debian
 package all refer to the **same exact public commit**. The pinned-input manifest
-records its commit and tree. Complete docs/notices/scripts before the final build;
-a documentation change after building requires a new final exact-source build.
+records its commit and tree. **Before publication**, complete docs/notices/scripts
+before the final build; any tracked documentation change after that build requires
+a new final exact-source build before publishing those artifacts.
 For multiarchitecture releases, both native ELF binaries/tars/packages have
 architecture-specific manifests but the same public commit/tree and byte-identical
 source/SPDX. Different common bytes block publication; never silently choose one.
 The QA-only loopback receiver is not a release asset. Merge only reviewed expected
 assets into one final checksum set after both native package/runtime gates.
 Do not relabel an earlier binary with a newer source commit.
+
+**After publication**, a documentation-only descendant is a separate source
+commit. It may record later observations, but must not retag the immutable
+release, replace its assets or relabel their embedded source as that descendant.
+Such documentation does not require a replacement release build or tag.
 
 Before publication run the Rust quality/security suite, actual isolated/browser/
 platform gates, locked-notice/source proof and disposable Linux package exercises.
@@ -75,10 +86,12 @@ The version-tag workflow calls the quality workflow and is the **single** GitHub
 release publisher after source/build/package gates. Do not race it with a manual
 `gh release create` or a second tag-triggered quality/publisher job.
 
-The private GitLab destination receives both the same reviewed source branch/tag
-and the actual released packages. Push only the approved `public-development`
-ref and the same version-tag object to the intended remotes; never push all refs,
-import private parents or change project visibility.
+The private GitLab destination is intended to receive both the same reviewed
+source branch/tag and the actual released packages. Push only the approved
+`public-development` ref and the same version-tag object where authorized access
+is available; record each provider's observed outcome. Never push all refs,
+import private parents or change project visibility. A blocked mirror remains
+pending, independently of an already successful publication at the other provider.
 
 After the sole GitHub publisher succeeds, download **all nine actual assets**
 into an empty private directory. Verify the single eight-entry `SHA256SUMS`,

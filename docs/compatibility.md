@@ -1,27 +1,88 @@
 # Compatibility and evidence matrix
 
-This is an evidence matrix, not vendor certification or a claim that an untested
-platform works. The immutable0.2.0 release and manifest identify the exact public
-source/build inputs. Rows record actual exercises, including the downloaded
-release and controlled nonprinting rollout; unsupported targets remain explicit.
+This is a dated evidence matrix, not vendor certification or a claim that an
+untested platform works. The current published Linux release is0.3.0, immutable
+source `503a7b90bc38a5d8b6917788ff7e237b2e684216`. Its
+[downloaded release identities](release-and-installation.md#observed-release-030)
+are distinct from the explicitly historical0.2 and pre-publication0.3 checkpoints
+below. Later client observations never relabel an older source/build.
 
 ## Server and distribution targets
 
 | Target | Build/distribution status | Discovery server | Evidence boundary |
 |---|---|---|---|
-| Linux amd64, glibc | Published0.2.0 tar/`.deb`; native build, fmt, strict all-target/all-feature clippy and55 tests passed in the actual release workflow | Real Avahi0.8 D-Bus collision, restart/re-registration and withdrawal exercised separately; actual released deployment observed by native macOS | Rust1.99.1 release compiler and actual Rust1.88.0 library/executable builds passed; no whole-build byte-reproducibility claim |
-| Debian12 amd64 | Disposable `.deb` install/reconfigure/remove/purge and documented tar install/service-user offline check passed | Real Avahi 0.8/private D-Bus lifecycle exercised separately | Retained state/account/config and unchanged container CUPS sentinel verified; not a booted systemd test |
-| Ubuntu26.04.1 amd64 | Disposable package/tar exercises passed; actual downloaded release deployed through the reviewed unit/private host override | Rust publisher retained the prior service identity/FQDN and passed fresh native macOS resolve/Get/Validate | Static identity/state/native config/PPD/defaults/TLS preserved; approved client/auth policy changed deliberately. A concurrent scheduled CUPS logrotate restart is recorded below, not called an unchanged invocation |
-| Linux arm64 | Unreleased0.3 native AArch64 ELF and both Debian/Ubuntu package/tar runtime gates exercised; no published ARM64 release yet | No additional discovery-server result inferred from packaging | Actual architecture/execution and installed-runtime evidence below; not cross-compilation or hardware-client certification |
-| macOS as server | Not supported/tested for this release | No macOS server Bonjour backend claim | Native macOS is a client verification target only |
-| Windows/BSD as server | Not supported/tested | Not claimed | No packages or operational guarantees |
+| Linux amd64, glibc | Published0.3.0 native x86_64 ELF, tar and `.deb`; actual publisher passed native quality/source/notices and minimum-Rust gates | Linux Avahi backend; historical actual lifecycle/rollout observations are dated below | Rust1.99.1 release compiler and separate Rust1.88.0 builds; pinned inputs are not a general byte-reproducibility claim |
+| Debian12, amd64 and arm64 | Actual0.3.0 package lifecycle plus installed package/tar runtimes passed on both native architectures | No new discovery or physical-client result inferred from packaging | Retained state/account/operator/CUPS sentinels and no auto-start; disposable containers, not booted systemd |
+| Ubuntu26.04.1, amd64 and arm64 | Actual0.3.0 package/tar gates passed on both native architectures | Separate from the historical released-deployment DNS-SD/native Mac checks below | Eight installed runtimes across both distributions/architectures/package forms; not a new physical-output test |
+| Linux arm64 | Published0.3.0 native AArch64 ELF, tar and `.deb`; both distribution gates passed in the sole publisher | No additional discovery-server result inferred from packaging | Actual machine183/native execution, not cross-compilation or hardware-client certification |
+| macOS as server | No macOS server package or operational support is provided; a native source-built loopback fixture was exercised only for client QA | No macOS server Bonjour backend claim | The hosted Mac client result below does not create a supported server distribution |
+| Windows/BSD as server | No native server packages or operational guarantees | Not claimed | A published Linux ELF in disposable WSL is not a native Windows server release |
 
 The executable is self-contained with respect to Rust crates, not a fully static
 operating-system image: glibc/libgcc and trusted CA data are prerequisites. The
 build manifest records actual dynamic requirements. CUPS, a working native queue
 and its driver/PPD are still required. No vendor driver/PPD is distributed.
 
+## Post-release native-client observations (2026-10-28)
+
+These checks used owned isolated destinations and public synthetic fixtures, not
+another physical printer model. They issued no Print/Create/Send/Cancel request,
+document or test page. Native metadata/settings consumption, GUI display, native
+IPP login, an emitted job ticket and measured paper are separate evidence layers.
+
+| Actual client | Observed result | Boundary |
+| --- | --- | --- |
+| Physical macOS27.0.1 arm64, fresh Default/Add/automatic Use | The real native panel displayed all three site recipes. Manual A3 zero-margin/Best-quality and duplex controls were observed; selecting the A3 named recipe changed quality/sides | Its observed Paper Size remainedA4 and Paper Handling destination was disabled. No complete A3 GUI ticket or output was produced; no Apple/server/driver root cause or universal preset behavior is inferred |
+| Independent hosted native macOS15.7.9 arm64 | [Run40713530309](https://github.com/ressl/ferriprint/actions/runs/40713530309): actual local CUPS generated A3 29700x42000 with all margins0, High5 and both duplex options; a fresh ordinary user separately passed system-libcups GPA and three strict Validate requests | Actual `VirtualMac2,1` / `Apple M1 (Virtual)`, not another physical Mac. Source-built Mach-O from unchanged503, not the Linux release ELF or a macOS server package; no native Print-auth or output proof |
+| Hosted Windows Server2025 x64 | [Run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761): owned WSL1/direct-exec build, absolute-helper guard, exact public version, real managed init/runtime and HTTP role checks passed. Native Add automatically selected Microsoft IPP Class Driver | Full native settings acceptance **failed**: native capabilities omitted A3, quality and duplex; validated A4 tickets did not preserve the required quality/duplex or bordered imageable area. Native jobs, frontend ledger and refused-operation counts were measured zero; owned cleanup passed. This is not a Windows incompatibility verdict |
+
+The preceding [Windows run40746710278](https://github.com/ressl/ferriprint/actions/runs/40746710278),
+[classifier run40755062052](https://github.com/ressl/ferriprint/actions/runs/40755062052)
+and [secret-free control40762760557](https://github.com/ressl/ferriprint/actions/runs/40762760557)
+retain their unknown unrecorded error contents; equal lengths never prove them
+identical to the later exposed error. The [bounded control40766425720](https://github.com/ressl/ferriprint/actions/runs/40766425720)
+established a bare-name helper execution failure, not the actual PATH contents.
+The reviewed absolute-executable correction worked in the latest run without
+a global PATH, privilege or product workaround. All retained attempts cleaned
+their owned resources and preserved the original queues/default/inbox driver.
+
+The later [bounded observation run40783698573](https://github.com/ressl/ferriprint/actions/runs/40783698573)
+passed real version/init/runtime/HTTP-role checks, then stopped on
+`THREAD_COVERAGE_LOST` after an initial all-thread attachment snapshot.
+No public-GPA canary was decoded/validated and native Add was not reached.
+Coverage was incomplete: zero decoded bytes proves neither absence of requests
+nor absence of future/asynchronous discovery. Detach, measured native/ledger/
+refused-operation zeros and owned cleanup passed. The preceding native settings
+failure remains the last actual native result; no loss cause or platform verdict
+is inferred from the observation guard.
+
+The physical Mac's missing generated-PPD `APPrinterPreset` entries did not prevent
+those three recipes appearing. Its observed A4/disabled-destination limitation
+remains explicit: recipe visibility or a changed quality control is not a
+complete A3 media/job-ticket result. Cleanup restored the checked printing-domain
+exports, queue URIs, defaults and options; it did not prove every volatile OS
+preference unchanged.
+
+The hosted Mac's immutable report retains `PASS_NATIVE_CLI` / `GUI_NOT_PROVEN`.
+Separately, raw own-process events identified a visible `NSPanel` equal to the
+actual `NSApp.modalWindow`, with the supplied `NSPrintInfo` identity. Its modal
+flag serialized as integer1, while the summary required strict booleantrue.
+That scoped modal observation is not full preset/A3-GUI acceptance: the recorded
+paper name remained `na-letter`. Actual frontend/native job state, spool and
+refused-operation counters were0; the owned queue/state/processes were removed,
+both listener ports were closed, and other queues/defaults were preserved.
+
+At the paper-diagnostic checkpoint, unknown tray counts (`-2`) remained unknown.
+Ready-media metadata was not proof of loaded stock. `media-empty-report` was
+informational/nonblocking while the printer/native queue were idle/accepting;
+a reported empty rear source did not establish that all sources were empty.
+No reason was reset/filtered and no physical stock or output was measured.
+
 ## Clients and ownership
+
+**Historical0.2 client checkpoint, 2026-10-27.** The observations below keep
+their original source, submission/cancellation and cleanup scope; they are not
+the post-release zero-submission exercises above.
 
 | Client/path | Exercised behavior | Not implied |
 |---|---|---|
@@ -40,6 +101,9 @@ as that observation, not as measured dimensions/quality or a reason to print aga
 
 ## Observed printer/profile/status boundaries
 
+These earlier inventory observations are dated evidence, not new measurements
+of the current physical ink or paper supply.
+
 | Item | Actual known observation | Honesty requirement |
 |---|---|---|
 | Epson ET-16600 native CUPS/vendor PPD | Private installed PPD/driver; real native metadata inspection and reviewed setup install resolved 34 numeric media variants and explicit A3 borderless/high mappings | Not bundled; no claim every model/PPD is supported |
@@ -50,6 +114,10 @@ as that observation, not as measured dimensions/quality or a reason to print aga
 | Profile declared-ready | Operator declaration only | Never label it a live physical tray sensor |
 
 ## Final release evidence
+
+**Historical0.2 release checkpoint, 2026-10-27.** Its native amd64 quality gate
+included55 tests; that is not a0.3 test count. Current0.3 publication evidence is
+linked above.
 
 [Version0.2.0](https://github.com/ressl/ferriprint/releases/tag/v0.2.0) is immutable
 commit `24ccd15668502e24854cdaea87b4500c8e767554`.
@@ -71,8 +139,9 @@ invocations and native configuration/PPD/defaults/TLS stayed unchanged.
 
 ## 0.3 development evidence boundaries
 
-Unreleased0.3 candidate `fe2611a421241ea3501ee84a2537a95e04619dc1`
-was actually built and exercised on two independent native Docker engines:
+At the historical pre-publication checkpoint,0.3 candidate
+`fe2611a421241ea3501ee84a2537a95e04619dc1` was built and exercised on two
+independent native Docker engines:
 Linux AArch64 on Apple Silicon and Linux x86_64 on Ubuntu26.04.1. Their pinned
 Rust1.99.1 images reported matching native daemon/kernel/rustc hosts; the actual
 ELFs were AArch64 machine183 and x86_64 machine62 and executed as version0.3.0.
@@ -124,24 +193,26 @@ queue URIs, both defaults, preference bytes and Keychain save state were not
 changed. This was actual native-library application, not a local queue install
 or a native print-dialog test.
 
-On the already observed real Mac, the0.3 native print-dialog installation/preset
-visibility gate remained **unverified / externally blocked**: the authorized
-session was screen-locked and accessibility reported no usable windows.
-Native-library/metadata success is not a GUI test. This is a session-access
-prerequisite, not a claim that macOS is unsupported; no unlock or permission
-bypass was attempted.
+At that earlier pre-publication checkpoint, the real Mac's native print-dialog/
+preset-visibility gate remained unverified: the authorized session was locked
+and no usable window was observed. No unlock or permission bypass was attempted.
+That was not an unsupported-platform finding or a general inference from a lock
+flag. The later actual unlocked Default/Add/Use and panel observations above
+supersede that session-access blocker, with their separate A4/recipe limitation.
+
+### Current remaining coverage prerequisites (2026-10-28)
 
 | Additional requested target | Actual inventory/access evidence | Remaining acceptance prerequisite |
 |---|---|---|
-| A second real Mac | Private inventory identifies additional M1 Max MacBook targets; an existing authenticated Darwin/arm64 shell runner is registered online/unpaused. One separately authorized bounded private metadata job never started and was canceled; no Mac command ran | Actual separately identified hardware/OS and a usable authorized native-client session; registration/presence is not execution or a print-dialog test |
-| Real iPhone | Existing network/phone metadata indicates devices, but no usable native print UI or exact current model/OS was exercised | An already trusted accessible real iPhone native print session; no pairing/permissions/new app was introduced |
-| Real iPad | Existing iPad inventory/network metadata, no usable native print UI/model/OS observation | An already trusted accessible physical iPad native print session; a simulator does not qualify |
-| Windows | Authorized VM/runner inventories produced no usable Windows native test environment; registered active executor metadata was Darwin/Linux | An authorized existing real Windows computer/VM and native print session; no new VM/driver or spoofed-client claim |
-| More real printer models / measured paper quality | Existing native destinations/queues resolve to the same Epson ET-16600; synthetic PPDs/receivers are explicitly synthetic | A separately identified real model with preexisting queue/driver; measured physical output requires separate approval and actual observations |
+| A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
+| Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
+| Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
+| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. A later bounded observation stopped on thread-coverage loss before a validated canary/native Add | Agent-actionable diagnosis remains: the coverage-loss thread/status snapshot was not retained, and the direct frontend GPA is not the driver's response. Preserve the actual missing A3/quality/duplex/A4-border failure; do not infer absent/future requests, a product/platform verdict or a guessed fix |
+| More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
-These are scoped evidence prerequisites, not permanent assertions that the
-platforms are unreachable or incompatible. They block their own support/coverage
-claims, not reachable software implementation. No extra physical page, native
-queue/default change, device pairing or permission grant was made to fill the
-matrix. Private device identities, addresses, credentials and operator/job logs
-are not public release material.
+These are scoped evidence prerequisites, not permanent claims that platforms
+are unreachable or incompatible. Hosted VMs do not become physical devices.
+Post-release fixtures added only owned temporary queues and restored their
+checked state; no physical-page, pairing or permission authority was introduced.
+Private device identities, endpoints, credentials, vendor PPD bytes and
+operator/job captures remain outside public release material.

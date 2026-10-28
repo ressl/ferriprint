@@ -6,10 +6,19 @@ All notable changes to Ferriprint are documented in this file. The format follow
 
 ## [Unreleased]
 
-This unreleased0.3 development cutover is not a new publication or a hardware
-certification claim. Actual native package/tar/runtime and CUPS recipe-application
-evidence is recorded in the compatibility/nonprinting guides; unexercised client
-UI/hardware targets remain explicit. The immutable0.2.0 release is unchanged.
+### Documentation
+
+- Refresh the published0.3.0 provenance, dated native-client observations and
+  remaining physical-device/measurement prerequisites. Documentation-only
+  descendants do not change the0.3.0 source/tag/assets or create a new release.
+
+## [0.3.0] - 2026-10-28
+
+Published for native Linux amd64 and arm64 from immutable source
+`503a7b90bc38a5d8b6917788ff7e237b2e684216`. Initial acceptance checkpoints below
+may predate publication; later native-client observations and their limits are
+dated separately in the compatibility/nonprinting guides. No hardware
+certification is implied; the immutable0.2.0 release remains unchanged.
 
 ### Changed
 
@@ -61,10 +70,11 @@ UI/hardware targets remain explicit. The immutable0.2.0 release is unchanged.
 - Record real CUPS `lp` application of the full exported A3 recipe, receiver native
   choices/copies/resolution/document, and measured PDF rotation/fit matrices
   instead of falsely claiming unchanged orientation/scaling ticket fields.
-- Record one authenticated normal-user macOS native-library application of the
-  saved full recipe export, actual receiver ticket/document and browser cancel,
-  without queue/default/preference/Keychain changes; keep the screen-locked
-  native print-dialog/preset-visibility gate explicitly unverified.
+- At the pre-publication checkpoint, record one authenticated normal-user macOS
+  native-library application of the saved full recipe export, actual receiver
+  ticket/document and browser cancel, without queue/default/preference/Keychain
+  changes. The desktop was then locked and native print-dialog/preset visibility
+  unverified; later post-release GUI observations are recorded separately.
 
 ## [0.2.0] - 2026-10-27
 
