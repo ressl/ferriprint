@@ -74,6 +74,24 @@ other10 counters were zero. These locate this reader's mapping branch, not a
 competing lock holder, syscall errno, OS cause or native fix. The final frontend
 ledger remained unknown and the fixture was preserved.
 
+The [existing-call run40840342606](https://github.com/ressl/ferriprint/actions/runs/40840342606)
+narrowed this QA reader to101 successful `F_GETLK` calls followed by the returned
+write-lock-type guard, with100 mapping retries and one protocol-limit return.
+The first returned-structure PID was0, explicitly unverified; neither targeted
+advisory-failure counter advanced. This is not proof of an output-field write,
+blocker identity or OS cause. The run again stopped before frontend stop/native
+Add and preserved its unknown final ledger, without replacing the native failure.
+
+The [output-sentinel run40844399095](https://github.com/ressl/ferriprint/actions/runs/40844399095)
+initialized only the output-only PID field to-2 before the same call. Its first
+recorded returned PID also equaled-2 and the write-lock-type guard still failed
+the protected snapshot. Equality alone identifies neither a writer layer nor a
+real holder. This bounded call chain has not supplied a trustworthy conflict
+report usable for the protected observer; a conformant existing locking/output
+path on an authorized environment is required without bypassing the corruption
+guard. This is not a blanket Windows/WSL incompatibility or native-pass claim.
+No frontend stop/native Add occurred and the unknown final ledger was preserved.
+
 The physical Mac's missing generated-PPD `APPrinterPreset` entries did not prevent
 those three recipes appearing. Its observed A4/disabled-destination limitation
 remains explicit: recipe visibility or a changed quality control is not a
@@ -225,7 +243,7 @@ supersede that session-access blocker, with their separate A4/recipe limitation.
 | A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
 | Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
 | Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
-| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. The latest explicitly derivative QA reader stopped on WAL-index mapping `BUSY` before frontend stop or native Add | Agent-actionable diagnosis remains: resolve that mapping/locking boundary and obtain valid driver request/response evidence. The direct frontend GPA is not the driver's response. Preserve the actual missing A3/quality/duplex/A4-border failure; do not infer absent/future requests, a product/platform verdict or a guessed fix |
+| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. The later protected observer stopped at an unusable/unverified GETLK conflict-report boundary before frontend stop or native Add | This observation path requires an authorized environment/call chain with trustworthy conformant locking output, without bypassing the safety guard. The original missing A3/quality/duplex/A4-border settings and driver-response evidence remain unresolved; the direct GPA is not the driver's response. No blanket Windows/WSL incompatibility or native pass is inferred |
 | More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
 These are scoped evidence prerequisites, not permanent claims that platforms

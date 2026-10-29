@@ -296,6 +296,30 @@ reached. Final native jobs were zero, but the final frontend ledger was unknown
 and the fixture was preserved. Known-head source-ref/clean-clone removal was
 separate; this was not a full-zero runtime-cleanup or native acceptance result.
 
+The [existing-call run40840342606](https://github.com/ressl/ferriprint/actions/runs/40840342606)
+again failed before frontend stop, trace or native Add. Fixed observations were
+`DMS_GETLK_REPORTED_WRLCK=101`, mapping `BUSY=100`, protocol-limit1, and no targeted
+exclusive/shared advisory failure. The first returned-structure PID0 remained
+`AS_KERNEL_REPORTED_UNVERIFIED`; both unobserved errno slots were null. Since
+the caller already supplied write-lock type and had not initialized the PID
+field, these observations do not prove a kernel output write or holder identity.
+The race/corruption guard remained intact. Final native jobs0 did not prove the
+unknown frontend ledger zero; runtime was preserved. Known-head ref/clean-clone
+cleanup passed separately, and the preceding actual native failure remained.
+
+The [output-sentinel run40844399095](https://github.com/ressl/ferriprint/actions/runs/40844399095)
+set only output-only `l_pid=-2` immediately before the existing call, leaving
+request type/range/whence and the corruption guard unchanged. The first recorded
+returned PID equaled-2, with the same101 write-lock-type guard observations,
+100 mapping retries and protocol-limit1. Neither equality nor these counts
+identify a writer layer, actual holder, stub or OS cause. This call chain did
+not provide a trustworthy conflict report usable for the protected observer.
+A conformant existing locking/output path on an authorized environment is needed;
+there is no source-proven safe fix or license to bypass the guard. No frontend
+stop, trace/canary or native Add occurred. Final native jobs0 did not prove the
+unknown final ledger zero; runtime was preserved and known-head source cleanup
+passed separately. The last actual native settings failure remains unchanged.
+
 A metadata-only receiver's fixed `jobs=[]` / `document_bytes=0` fields are design
 invariants, not independently measured document counters. Real native/frontend
 ledgers, spool state and refused-operation counts are recorded separately.
