@@ -273,6 +273,29 @@ Detach, measured native/ledger/refused-operation zeros and owned cleanup passed.
 This does not replace the preceding actual native settings failure or prove a
 Windows/product incompatibility, client response consumption or an original fix.
 
+The later [snapshot-boundary run40823203264](https://github.com/ressl/ferriprint/actions/runs/40823203264)
+on 2026-10-29 reached the published runtime and HTTP-role checks, but its first
+protected read-only ledger count failed with SQLite `SQLITE_PROTOCOL` (15).
+Credential and database-file guards passed. No owned frontend stop, gated
+release, trace/canary or native Add occurred, so this run does not replace the
+preceding actual native settings failure. Its final native job count was zero,
+but the final frontend ledger was unproven and the fixture was preserved on
+uncertainty; no full-zero or successful runtime-teardown claim is made.
+Known-head-only source-branch/clean-clone cleanup was separate from that runtime
+preservation and provider-managed VM disposal. The failing WAL retry mechanism
+remains unestablished; no group/permission/OS cause or native fix is inferred.
+
+The [derivative-reader run40833645412](https://github.com/ressl/ferriprint/actions/runs/40833645412)
+used an explicitly attributed SQLite3.50.2 QA derivative with a separate Cargo
+root/lock, leaving the published frontend unchanged. Its first read-only count
+again failed with code15. Process-local counters recorded `INDEX_SHMMAP_BUSY=100`
+and `PROTOCOL_LIMIT_REACHED=1`, with the other10 fixed counters zero. This locates
+this modified reader's retry branch, not a kernel lock holder, errno, OS cause,
+historical branch or native fix. No frontend stop, trace/canary or native Add was
+reached. Final native jobs were zero, but the final frontend ledger was unknown
+and the fixture was preserved. Known-head source-ref/clean-clone removal was
+separate; this was not a full-zero runtime-cleanup or native acceptance result.
+
 A metadata-only receiver's fixed `jobs=[]` / `document_bytes=0` fields are design
 invariants, not independently measured document counters. Real native/frontend
 ledgers, spool state and refused-operation counts are recorded separately.

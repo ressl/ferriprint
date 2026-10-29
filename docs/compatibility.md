@@ -42,8 +42,8 @@ and [secret-free control40762760557](https://github.com/ressl/ferriprint/actions
 retain their unknown unrecorded error contents; equal lengths never prove them
 identical to the later exposed error. The [bounded control40766425720](https://github.com/ressl/ferriprint/actions/runs/40766425720)
 established a bare-name helper execution failure, not the actual PATH contents.
-The reviewed absolute-executable correction worked in the latest run without
-a global PATH, privilege or product workaround. All retained attempts cleaned
+The reviewed absolute-executable correction worked in the native run above without
+a global PATH, privilege or product workaround. Those earlier attempts cleaned
 their owned resources and preserved the original queues/default/inbox driver.
 
 The later [bounded observation run40783698573](https://github.com/ressl/ferriprint/actions/runs/40783698573)
@@ -55,6 +55,24 @@ nor absence of future/asynchronous discovery. Detach, measured native/ledger/
 refused-operation zeros and owned cleanup passed. The preceding native settings
 failure remains the last actual native result; no loss cause or platform verdict
 is inferred from the observation guard.
+
+The subsequent [snapshot-boundary run40823203264](https://github.com/ressl/ferriprint/actions/runs/40823203264)
+on 2026-10-29 again passed version/init/runtime and HTTP-role checks. Its protected
+read-only ledger snapshot failed at the first count query with SQLite
+`SQLITE_PROTOCOL` (15), after the credential and database-file guards passed.
+This happened before the owned frontend stopped, a new process was released,
+or native Add/capability collection began. The uncertain fixture was preserved,
+not declared fully zero or cleaned. This is a WAL read-start diagnostic boundary,
+not evidence of an underlying OS cause, a native settings fix or incompatibility.
+
+The [derivative-reader run40833645412](https://github.com/ressl/ferriprint/actions/runs/40833645412)
+used a separately built, explicitly patched SQLite3.50.2 QA reader, not a changed
+published frontend or official release artifact. Its first protected read-only
+count again failed with code15 before frontend stop or native Add. Fixed counters
+recorded100 WAL-index mapping `BUSY` retries and one protocol-limit return; the
+other10 counters were zero. These locate this reader's mapping branch, not a
+competing lock holder, syscall errno, OS cause or native fix. The final frontend
+ledger remained unknown and the fixture was preserved.
 
 The physical Mac's missing generated-PPD `APPrinterPreset` entries did not prevent
 those three recipes appearing. Its observed A4/disabled-destination limitation
@@ -207,7 +225,7 @@ supersede that session-access blocker, with their separate A4/recipe limitation.
 | A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
 | Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
 | Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
-| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. A later bounded observation stopped on thread-coverage loss before a validated canary/native Add | Agent-actionable diagnosis remains: the coverage-loss thread/status snapshot was not retained, and the direct frontend GPA is not the driver's response. Preserve the actual missing A3/quality/duplex/A4-border failure; do not infer absent/future requests, a product/platform verdict or a guessed fix |
+| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. The latest explicitly derivative QA reader stopped on WAL-index mapping `BUSY` before frontend stop or native Add | Agent-actionable diagnosis remains: resolve that mapping/locking boundary and obtain valid driver request/response evidence. The direct frontend GPA is not the driver's response. Preserve the actual missing A3/quality/duplex/A4-border failure; do not infer absent/future requests, a product/platform verdict or a guessed fix |
 | More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
 These are scoped evidence prerequisites, not permanent claims that platforms
