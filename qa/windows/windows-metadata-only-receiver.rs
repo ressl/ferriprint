@@ -1769,7 +1769,10 @@ fn kernel_result(call: KernelCall, returned: i64, text: &str) -> Result<KernelRe
     if returned < 0 { return Err("KERNEL_SYSCALL_RESULT"); }
     if let Some(annotation) = rest.strip_prefix('<') {
         let annotation = annotation.strip_suffix('>').ok_or("KERNEL_FD_ANNOTATION")?;
-        kernel_annotation(annotation)?;
+        // The same device-class tag strace appends to argument annotations also
+        // appears on returned descriptors, e.g. "= 6</dev/null<char 1:3>>". Strip
+        // exactly that documented suffix here too; the tag is not a socket target.
+        kernel_annotation(strip_device_tag(annotation).unwrap_or(annotation))?;
         let fd_result = matches!(call, KernelCall::Socket | KernelCall::Accept | KernelCall::Accept4 |
             KernelCall::Dup | KernelCall::Dup2 | KernelCall::Dup3 | KernelCall::Fcntl |
             KernelCall::Open | KernelCall::Openat | KernelCall::Openat2 | KernelCall::Creat |
