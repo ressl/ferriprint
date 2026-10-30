@@ -190,6 +190,39 @@ namespaced attribute plus `ferriprint-telemetry-freshness`,
 `-freshness-scope` and `-physical-freshness` keeps the distinction visible to
 any client that chooses to read it.
 
+### `ipp-attribute-fidelity` and unsupported Job Template attributes
+
+RFC 8011 Appendix C.1 requires both behaviours: with
+`ipp-attribute-fidelity=false` (also the default when the Client omits it) the
+Printer "MUST always accept the request by ignoring unsupported Job Template
+attributes and by substituting unsupported values of supported Job Template
+attributes with supported values"; with `true` it "MUST reject the request" and
+return the offending attributes in the Unsupported Attributes group
+(status-code semantics in B.1.4.12). `protocol::template` previously rejected
+everything outside its match list at either fidelity, so any client that sends an
+extra standard attribute — the Microsoft IPP Class Driver sends `job-priority`
+and `finishings` — was refused even though it asked for best-effort handling.
+
+Ignoring is now the default for these attributes, because their best-effort
+meaning is defined and cannot change what paper is used:
+
+| Attribute | Best-effort behaviour | Why it is safe |
+|---|---|---|
+| `job-priority` | ignored | scheduler hint; the native queue decides ordering |
+| `finishings` | ignored (`none`) | no finishing hardware is driven |
+| `output-bin` | ignored | one physical output path |
+| `page-ranges` | ignored (all pages) | `page-ranges-supported=false` is advertised |
+| `job-sheets` | ignored (no banner) | not advertised in `job-creation-attributes-supported`; no banner media exists |
+| `number-up` | substituted with1 | `number-up-supported=1` is advertised |
+| any unknown attribute | ignored, reported as unsupported | the Client asked for best-effort |
+
+Two families stay rejected at both fidelity values, because a silent substitution
+would print something the Client did not ask for: `media`/`media-col` (a
+substituted size means wrong paper in the tray) and `copies` (a substituted count
+means the wrong number of copies). Both are validated unconditionally in
+`PrinterProfile::resolve`, which is also what makes a real unsupported size fail
+for a best-effort request.
+
 ## Final release evidence
 
 **Historical0.2 release checkpoint, 2026-10-27.** Its native amd64 quality gate

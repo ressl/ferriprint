@@ -758,3 +758,189 @@ async fn authenticated_principal_cannot_be_spoofed_by_requesting_user_name() {
             .is_err()
     );
 }
+
+/// RFC 8011 Appendix C.1: with "ipp-attribute-fidelity" 'false' (also the
+/// default) "the Printer MUST always accept the request by ignoring unsupported
+/// Job Template attributes"; with 'true' it "MUST reject the request".
+/// These exercise real operation responses, not just the parser.
+#[tokio::test]
+async fn best_effort_fidelity_ignores_unsupported_attributes_and_strict_fidelity_rejects() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+
+    // (a) Unknown/substitutable attribute + fidelity=false: accepted, and the
+    // ignored attribute is reported in the Unsupported Attributes group.
+    let mut request = front.request(Operation::ValidateJob, None);
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(false),
+    )
+    .unwrap();
+    add(&mut request, JOB, "job-priority", IppValue::Integer(50)).unwrap();
+    add(&mut request, JOB, "finishings", IppValue::Enum(3)).unwrap();
+    add(
+        &mut request,
+        JOB,
+        "media",
+        keyword("iso_a4_210x297mm").unwrap(),
+    )
+    .unwrap();
+    let response = front.send(request, &[]).await;
+    assert_eq!(
+        response.header().status_code(),
+        StatusCode::SuccessfulOkIgnoredOrSubstitutedAttributes,
+        "{:?}",
+        response.attributes()
+    );
+    assert!(
+        attr(
+            &response,
+            DelimiterTag::UnsupportedAttributes,
+            "job-priority"
+        )
+        .is_some()
+    );
+    assert!(attr(&response, DelimiterTag::UnsupportedAttributes, "finishings").is_some());
+
+    // (b) The same attributes with fidelity=true: rejected as unsupported.
+    let mut request = front.request(Operation::ValidateJob, None);
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(true),
+    )
+    .unwrap();
+    add(&mut request, JOB, "job-priority", IppValue::Integer(50)).unwrap();
+    let response = front.send(request, &[]).await;
+    assert_eq!(
+        response.header().status_code(),
+        StatusCode::ClientErrorAttributesOrValuesNotSupported
+    );
+    assert!(
+        attr(
+            &response,
+            DelimiterTag::UnsupportedAttributes,
+            "job-priority"
+        )
+        .is_some()
+    );
+
+    // (c) number-up=2 is not implemented; best-effort means one-up, not a rejection.
+    let mut request = front.request(Operation::ValidateJob, None);
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(false),
+    )
+    .unwrap();
+    add(&mut request, JOB, "number-up", IppValue::Integer(2)).unwrap();
+    let response = front.send(request, &[]).await;
+    assert_eq!(
+        response.header().status_code(),
+        StatusCode::SuccessfulOkIgnoredOrSubstitutedAttributes,
+        "{:?}",
+        response.attributes()
+    );
+    assert!(attr(&response, DelimiterTag::UnsupportedAttributes, "number-up").is_some());
+
+    // (d) Paper identity is never substituted, even for best-effort jobs: an
+    // unknown size must fail rather than silently printing on other paper.
+    let mut request = front.request(Operation::ValidateJob, None);
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(false),
+    )
+    .unwrap();
+    add(
+        &mut request,
+        JOB,
+        "media",
+        keyword("iso_a2_420x594mm").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        front.send(request, &[]).await.header().status_code(),
+        StatusCode::ClientErrorAttributesOrValuesNotSupported
+    );
+
+    // The same applies to copies outside the supported range.
+    let mut request = front.request(Operation::ValidateJob, None);
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(false),
+    )
+    .unwrap();
+    add(&mut request, JOB, "copies", IppValue::Integer(1000)).unwrap();
+    assert_eq!(
+        front.send(request, &[]).await.header().status_code(),
+        StatusCode::ClientErrorAttributesOrValuesNotSupported
+    );
+}
+
+/// A best-effort Print-Job must actually create and submit the job with the
+/// substituted values, not merely return a success status.
+#[tokio::test]
+async fn best_effort_print_job_is_created_and_submitted_with_substituted_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+    let mut request = front.request(Operation::PrintJob, None);
+    add(
+        &mut request,
+        OP,
+        "document-format",
+        mime("application/pdf").unwrap(),
+    )
+    .unwrap();
+    add(
+        &mut request,
+        OP,
+        "ipp-attribute-fidelity",
+        IppValue::Boolean(false),
+    )
+    .unwrap();
+    add(&mut request, JOB, "job-priority", IppValue::Integer(50)).unwrap();
+    add(&mut request, JOB, "finishings", IppValue::Enum(3)).unwrap();
+    add(&mut request, JOB, "number-up", IppValue::Integer(2)).unwrap();
+    add(&mut request, JOB, "copies", IppValue::Integer(2)).unwrap();
+    add(
+        &mut request,
+        JOB,
+        "sides",
+        keyword("two-sided-long-edge").unwrap(),
+    )
+    .unwrap();
+    let response = front
+        .send(request, b"%PDF-1.4 nonprinting best-effort")
+        .await;
+    assert_eq!(
+        response.header().status_code(),
+        StatusCode::SuccessfulOkIgnoredOrSubstitutedAttributes,
+        "{:?}",
+        response.attributes()
+    );
+    let id = job_id(&response);
+    front.app.engine.tick().await.unwrap();
+    let received = receiver.device.jobs.lock().clone();
+    assert_eq!(received.len(), 1, "exactly one upstream job");
+    assert_eq!(received[0].copies, 2, "supported copies are still applied");
+    assert_eq!(
+        received[0].options.get("Duplex").map(String::as_str),
+        Some("DuplexNoTumble")
+    );
+    assert!(
+        !received[0].options.contains_key("number-up"),
+        "number-up is not forwarded as a PPD option"
+    );
+    let job = front.app.engine.get_job(id).await.unwrap().unwrap();
+    assert_eq!(job.resolved.copies, 2);
+}

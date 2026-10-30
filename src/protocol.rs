@@ -289,11 +289,53 @@ pub fn validate_envelope(
     }
     Ok(id)
 }
-pub fn template(request: &Metadata) -> std::result::Result<JobTemplate, Rejection> {
+/// A parsed Job Template plus the attributes/values that were ignored because
+/// the Client asked for best-effort handling (`ipp-attribute-fidelity=false`).
+pub struct ParsedTemplate {
+    pub job: JobTemplate,
+    /// Client-supplied attributes that were ignored or substituted. Reported in
+    /// the Unsupported Attributes group so the Client can tell what changed.
+    pub ignored: Vec<IppAttribute>,
+}
+/// RFC 8011 Appendix C.1: with "ipp-attribute-fidelity" 'false' (also the
+/// default when omitted) "the Printer MUST always accept the request by
+/// ignoring unsupported Job Template attributes and by substituting unsupported
+/// values of supported Job Template attributes with supported values"; with
+/// 'true' it "MUST reject the request" instead (status semantics: B.1.4.12).
+///
+/// Two families are never softened, at either fidelity, because silently
+/// proceeding would print something the Client did not ask for:
+/// `media`/`media-col` (a substituted paper size means wrong paper in the tray)
+/// and `copies` (a substituted count means the wrong number of copies). Their
+/// value validation lives in [`crate::profile::PrinterProfile::resolve`], which
+/// rejects unsupported media and out-of-range copies unconditionally.
+pub fn template(request: &Metadata) -> std::result::Result<ParsedTemplate, Rejection> {
+    let fidelity = matches!(
+        attr(
+            request,
+            DelimiterTag::OperationAttributes,
+            "ipp-attribute-fidelity"
+        ),
+        Some(IppValue::Boolean(true))
+    );
     let mut job = JobTemplate::default();
+    let mut ignored = Vec::new();
     if let Some(group) = request.attributes().first_of(DelimiterTag::JobAttributes) {
         for a in group.attributes() {
             let fail = || Rejection::unsupported(a, "unsupported job template value");
+            // Substitutable attributes whose unsupported form has a defined
+            // best-effort meaning: print on one-up, at the Printer's priority,
+            // with no finishing, no output-bin selection, all pages and no
+            // banner. Ignoring them changes presentation, never paper identity.
+            let substitutable = matches!(
+                a.name().as_str(),
+                "number-up"
+                    | "job-priority"
+                    | "finishings"
+                    | "output-bin"
+                    | "page-ranges"
+                    | "job-sheets"
+            );
             match (a.name().as_str(), a.value()) {
                 ("media", IppValue::Keyword(s)) => job.media = Some(s.to_string()),
                 ("media-col", IppValue::Collection(map)) => {
@@ -322,11 +364,37 @@ pub fn template(request: &Metadata) -> std::result::Result<JobTemplate, Rejectio
                 ("job-hold-until", IppValue::Keyword(s)) if s.as_str() == "no-hold" => {}
                 ("multiple-document-handling", IppValue::Keyword(s))
                     if s.as_str() == "separate-documents-collated-copies" => {}
+                // Never substituted at any fidelity: paper identity and copy
+                // count, including a malformed collection or wrong syntax.
+                ("media" | "media-col" | "copies", _) => return Err(fail()),
+                // `job-preset-name` is not a standard request selector, and a
+                // preset carries media and quality: ignoring it would print
+                // other paper than selected, so it stays a hard rejection.
+                ("job-preset-name", _) => return Err(fail()),
+                _ if substitutable && !fidelity => ignored.push(a.clone()),
+                // An unknown attribute is ignorable only for best-effort Jobs.
+                _ if !fidelity => ignored.push(a.clone()),
                 _ => return Err(fail()),
             }
         }
     }
-    Ok(job)
+    Ok(ParsedTemplate { job, ignored })
+}
+/// RFC 8011 Section 4.1.7 requires the Unsupported Attributes group exactly
+/// when the status-code is one of the four "ignored/substituted" or
+/// "not-supported/conflicting" values.
+pub fn mark_ignored(reply: &mut IppRequestResponse, ignored: &[IppAttribute]) -> Result<()> {
+    if ignored.is_empty() {
+        return Ok(());
+    }
+    reply.header_mut().operation_or_status =
+        StatusCode::SuccessfulOkIgnoredOrSubstitutedAttributes as i16;
+    for attribute in ignored {
+        reply
+            .attributes_mut()
+            .add(DelimiterTag::UnsupportedAttributes, attribute.clone());
+    }
+    Ok(())
 }
 fn parse_media(
     map: &BTreeMap<ipp::value::IppName, IppValue>,
