@@ -34,7 +34,7 @@ IPP login, an emitted job ticket and measured paper are separate evidence layers
 | --- | --- | --- |
 | Physical macOS27.0.1 arm64, fresh Default/Add/automatic Use | The real native panel displayed all three site recipes. Manual A3 zero-margin/Best-quality and duplex controls were observed; selecting the A3 named recipe changed quality/sides | Its observed Paper Size remainedA4 and Paper Handling destination was disabled. No complete A3 GUI ticket or output was produced; no Apple/server/driver root cause or universal preset behavior is inferred |
 | Independent hosted native macOS15.7.9 arm64 | [Run40713530309](https://github.com/ressl/ferriprint/actions/runs/40713530309): actual local CUPS generated A3 29700x42000 with all margins0, High5 and both duplex options; a fresh ordinary user separately passed system-libcups GPA and three strict Validate requests | Actual `VirtualMac2,1` / `Apple M1 (Virtual)`, not another physical Mac. Source-built Mach-O from unchanged503, not the Linux release ELF or a macOS server package; no native Print-auth or output proof |
-| Hosted Windows Server2025 x64 | [Run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761): owned WSL1/direct-exec build, absolute-helper guard, exact public version, real managed init/runtime and HTTP role checks passed. Native Add automatically selected Microsoft IPP Class Driver | Full native settings acceptance **failed**: native capabilities omitted A3, quality and duplex; validated A4 tickets did not preserve the required quality/duplex or bordered imageable area. Native jobs, frontend ledger and refused-operation counts were measured zero; owned cleanup passed. This is not a Windows incompatibility verdict |
+| Hosted Windows Server2025 x64 | [Run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435): this source tree built in owned WSL1 on literal loopback; native Add automatically selected Microsoft IPP Class Driver; native capabilities and validated tickets preserved A3 297x420 mm borderless, High quality, zero imageable origin, A4 210x297 mm with 3000 DIP margins and A4 `TwoSidedLongEdge` | Native Print Schema/ticket metadata on a disposable hosted VM only. Earlier [run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761) reported the opposite for the same gate but against the published ELF; its host-provided capability XML described the driver's fallback after the frontend rejected the conforming `document-format`. No measured paper, edge coverage, physical output, native IPP authentication or Windows-incompatibility verdict |
 
 The preceding [Windows run40746710278](https://github.com/ressl/ferriprint/actions/runs/40746710278),
 [classifier run40755062052](https://github.com/ressl/ferriprint/actions/runs/40755062052)
@@ -55,6 +55,36 @@ nor absence of future/asynchronous discovery. Detach, measured native/ledger/
 refused-operation zeros and owned cleanup passed. The preceding native settings
 failure remains the last actual native result; no loss cause or platform verdict
 is inferred from the observation guard.
+
+The native settings failure above was then traced to a frontend defect rather
+than a driver or platform limit, and re-exercised. The real
+[native run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)
+built this source tree inside owned WSL1, served it on literal loopback, added
+the queue with the same automatic Microsoft IPP Class Driver and passed all
+three requested settings: A3 297x420 mm borderless with High quality and zero
+imageable origin, A4 210x297 mm bordered with 3000 DIP (0.1 in) margins, and A4
+`TwoSidedLongEdge`, each `NoConflict` with unchanged copies and Portrait
+orientation. The driver's own document advertised `ISOA3`, `Borderless`,
+`Draft`/`Normal`/`High`, `OneSided`/`TwoSidedShortEdge`/`TwoSidedLongEdge` and
+`ns0001:DPI300x300`.
+
+That run's recorded frontend log shows the actual driver requests: two
+Get-Printer-Attributes carrying `document-format="application/pdf"` with 69
+requested attributes each, separated by narrower re-reads. This is the request
+the previous build rejected. The cause was the operation-attribute allowlist
+admitting only `requested-attributes` for Get-Printer-Attributes, so a
+conforming `document-format` was answered
+`client-error-document-format-not-supported` with zero Printer Attributes; RFC
+8011 §4.2.5.1 requires the Printer to support that attribute. The fix accepts
+it and keeps one capability set for every format, as §4.2.5.1 requires of a
+Printer that does not distinguish per-format sets, and it invents no value.
+
+The earlier host-provided capability XML that lacked A3, quality and duplex
+described the driver's fallback, not the capabilities this frontend serves.
+`required_native_settings_pass` is native Print Schema metadata and validated
+tickets, not measured paper, edge coverage or physical output. The masked
+driver-response boundary that the intervening protected-observer runs hit is
+unchanged and unrelated to this defect.
 
 The subsequent [snapshot-boundary run40823203264](https://github.com/ressl/ferriprint/actions/runs/40823203264)
 on 2026-10-29 again passed version/init/runtime and HTTP-role checks. Its protected
@@ -317,7 +347,7 @@ supersede that session-access blocker, with their separate A4/recipe limitation.
 | A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
 | Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
 | Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
-| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. The later protected observer stopped at an unusable/unverified GETLK conflict-report boundary before frontend stop or native Add | This observation path requires an authorized environment/call chain with trustworthy conformant locking output, without bypassing the safety guard. The original missing A3/quality/duplex/A4-border settings and driver-response evidence remain unresolved; the direct GPA is not the driver's response. No blanket Windows/WSL incompatibility or native pass is inferred |
+| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed. The first claim of missing A3/quality/duplex/A4-border settings was traced to a frontend Get-Printer-Attributes defect that rejected the driver's conforming `document-format`; [run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435) then passed all three requested settings with the driver advertising A3, Borderless, Draft/Normal/High, both duplex options and 300x300. Separately, a protected observer path stopped at an unusable/unverified GETLK conflict-report boundary before frontend stop or native Add | The passing result is native Print Schema capability and validated-ticket metadata on a disposable hosted VM, not measured paper, edge coverage, physical output, native IPP authentication or TLS. The protected-observer prerequisite stands on its own and was not needed for this capability result. No blanket Windows/WSL incompatibility is inferred |
 | More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
 These are scoped evidence prerequisites, not permanent claims that platforms

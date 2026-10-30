@@ -1,0 +1,399 @@
+{
+  "evidence_kind": "actual native Windows run, attempt 1, no rerun",
+  "run_id": 41051572435,
+  "run_url": "https://github.com/ressl/ferriprint/actions/runs/41051572435",
+  "workflow": "Native Windows source-build capability acceptance",
+  "runner": "windows-2025",
+  "tested_artifact": "source build of commit 6040a5a2fcdb89145703ca15807a9897f1832015 inside owned WSL1 (not a published release)",
+  "endpoint_under_test": {
+    "frontend": "http://127.0.0.1:18634/ipp/print/win-native-caps",
+    "advertised_ipp_uri": "ipp://127.0.0.1:18634/ipp/print/win-native-caps",
+    "not_tested": "gallifrey CUPS queue; no production endpoint contacted"
+  },
+  "native_queue": {
+    "driver": "Microsoft IPP Class Driver",
+    "port": "WSD-92aff7a6-51d9-4d8e-b00b-f925644ccaf9",
+    "ipp_transport_url": "http://127.0.0.1:18634/ipp/print/win-native-caps",
+    "advertised_ipp_uri": "ipp://127.0.0.1:18634/ipp/print/win-native-caps"
+  },
+  "driver_offered_capabilities": {
+    "media": [
+      "NorthAmericaLetter",
+      "ISOA3",
+      "ISOA4"
+    ],
+    "quality": [
+      "Normal",
+      "Draft",
+      "High"
+    ],
+    "duplex": [
+      "OneSided",
+      "TwoSidedShortEdge",
+      "TwoSidedLongEdge"
+    ],
+    "borderless": [
+      "Borderless",
+      "None"
+    ],
+    "resolution_options_from_driver_document": [
+      "ns0001:DPI300x300"
+    ],
+    "resolution_typed_dotnet_collection": [],
+    "driver_feature_names": [
+      "psk:PageMediaSize",
+      "psk:JobInputBin",
+      "psk:PageBorderless",
+      "psk:PageMediaType",
+      "psk:JobOutputBin",
+      "psk:JobPageOrder",
+      "psk:PageOrientation",
+      "psk:PageOutputQuality",
+      "psk:PageScaling",
+      "psk:JobDuplexAllDocumentsContiguously",
+      "psk:PageResolution",
+      "psk:PageOutputColor"
+    ],
+    "default_imageable_area_dip": {
+      "origin_x_dip": 11.338582677165354,
+      "origin_y_dip": 11.338582677165354,
+      "width_dip": 771.0236220472441,
+      "height_dip": 1099.8425196850394
+    }
+  },
+  "validated_tickets": [
+    {
+      "recipe": "a3-borderless-high",
+      "native_media_available": true,
+      "actual_media": "ISOA3",
+      "actual_width_mm": 297,
+      "actual_height_mm": 419.99999999999994,
+      "actual_quality": "High",
+      "actual_duplex": "OneSided",
+      "actual_borderless": "Borderless",
+      "actual_copies": 1,
+      "actual_orientation": "Portrait",
+      "validation_conflict": "NoConflict",
+      "semantic_checks": {
+        "dimensions_match": true,
+        "quality_match": true,
+        "duplex_match": true,
+        "resolution_300dpi_match": true,
+        "requested_borderless_or_bordered_imageable_margins_match": true
+      },
+      "actual_imageable_area": {
+        "origin_x_dip": 0,
+        "origin_y_dip": 0,
+        "width_dip": 1122.5196850393702,
+        "height_dip": 1587.4015748031495
+      },
+      "required_native_settings_pass": true
+    },
+    {
+      "recipe": "a4-normal",
+      "native_media_available": true,
+      "actual_media": "ISOA4",
+      "actual_width_mm": 209.99999999999997,
+      "actual_height_mm": 297,
+      "actual_quality": "Normal",
+      "actual_duplex": "OneSided",
+      "actual_borderless": "None",
+      "actual_copies": 1,
+      "actual_orientation": "Portrait",
+      "validation_conflict": "NoConflict",
+      "semantic_checks": {
+        "dimensions_match": true,
+        "quality_match": true,
+        "duplex_match": true,
+        "resolution_300dpi_match": true,
+        "requested_borderless_or_bordered_imageable_margins_match": true
+      },
+      "actual_imageable_area": {
+        "origin_x_dip": 11.338582677165354,
+        "origin_y_dip": 11.338582677165354,
+        "width_dip": 771.0236220472441,
+        "height_dip": 1099.8425196850394
+      },
+      "required_native_settings_pass": true
+    },
+    {
+      "recipe": "a4-duplex",
+      "native_media_available": true,
+      "actual_media": "ISOA4",
+      "actual_width_mm": 209.99999999999997,
+      "actual_height_mm": 297,
+      "actual_quality": "Normal",
+      "actual_duplex": "TwoSidedLongEdge",
+      "actual_borderless": "None",
+      "actual_copies": 1,
+      "actual_orientation": "Portrait",
+      "validation_conflict": "NoConflict",
+      "semantic_checks": {
+        "dimensions_match": true,
+        "quality_match": true,
+        "duplex_match": true,
+        "resolution_300dpi_match": true,
+        "requested_borderless_or_bordered_imageable_margins_match": true
+      },
+      "actual_imageable_area": {
+        "origin_x_dip": 11.338582677165354,
+        "origin_y_dip": 11.338582677165354,
+        "width_dip": 771.0236220472441,
+        "height_dip": 1099.8425196850394
+      },
+      "required_native_settings_pass": true
+    }
+  ],
+  "required_native_settings_pass": true,
+  "driver_requests_observed": [
+    {
+      "document_format": null,
+      "requested_count": 21,
+      "requested": [
+        "uri-authentication-supported",
+        "document-format-default",
+        "document-format-preferred",
+        "document-format-supported",
+        "ipp-versions-supported",
+        "media-supported",
+        "media-type-supported",
+        "mopria-certified",
+        "mopria_certified",
+        "printer-dns-sd-name",
+        "printer-firmware-name",
+        "printer-firmware-string-version",
+        "printer-device-id",
+        "printer-info",
+        "printer-location",
+        "printer-make-and-model",
+        "printer-more-info",
+        "printer-name",
+        "printer-uri-supported",
+        "printer-uuid",
+        "uri-security-supported"
+      ],
+      "advertised_printer_attributes": 14
+    },
+    {
+      "document_format": null,
+      "requested_count": 3,
+      "requested": [
+        "document-format-default",
+        "document-format-preferred",
+        "document-format-supported"
+      ],
+      "advertised_printer_attributes": 2
+    },
+    {
+      "document_format": null,
+      "requested_count": 2,
+      "requested": [
+        "mopria-certified",
+        "printer-strings-languages-supported"
+      ],
+      "advertised_printer_attributes": 0
+    },
+    {
+      "document_format": "application/pdf",
+      "requested_count": 69,
+      "requested": [
+        "client-info-supported",
+        "compression-supported",
+        "document-format-default",
+        "document-format-details-supported",
+        "document-format-preferred",
+        "document-format-supported",
+        "job-impressions-supported",
+        "job-media-sheets-supported",
+        "job-pages-per-set-supported",
+        "job-password-encryption-supported",
+        "media-col-supported",
+        "media-supported",
+        "media-type-supported",
+        "mopria-certified",
+        "multiple-document-handling-supported",
+        "operations-supported",
+        "orientation-requested-supported",
+        "printer-is-accepting-jobs",
+        "printer-uuid",
+        "copies-default",
+        "copies-supported",
+        "media-col-database",
+        "media-col-default",
+        "media-col-ready",
+        "media-default",
+        "media-left-margin-supported",
+        "media-right-margin-supported",
+        "media-top-margin-supported",
+        "media-bottom-margin-supported",
+        "printer-firmware-name",
+        "printer-firmware-string-version",
+        "printer-make-and-model",
+        "printer-resolution-default",
+        "printer-resolution-supported",
+        "printer-uri-supported",
+        "print-quality-default",
+        "print-quality-supported",
+        "pwg-raster-document-resolution-supported",
+        "pwg-raster-document-type-supported",
+        "finishings-default",
+        "finishings-supported",
+        "job-password-supported",
+        "printer-mandatory-job-attributes",
+        "media-size-supported",
+        "media-source-default",
+        "media-source-supported",
+        "multiple-document-handling-default",
+        "number-up-default",
+        "number-up-supported",
+        "output-bin-default",
+        "output-bin-supported",
+        "orientation-requested-default",
+        "pclm-raster-back-side",
+        "pclm-source-resolution-supported",
+        "pdf-fit-to-page-default",
+        "pdf-fit-to-page-supported",
+        "pdf-k-octets-supported",
+        "presentation-direction-number-up-default",
+        "presentation-direction-number-up-supported",
+        "print-color-mode-default",
+        "print-color-mode-supported",
+        "printer-output-tray",
+        "pages-per-minute",
+        "pages-per-minute-color",
+        "print-scaling-default",
+        "print-scaling-supported",
+        "pwg-raster-document-sheet-back",
+        "sides-default",
+        "sides-supported"
+      ],
+      "advertised_printer_attributes": 40
+    },
+    {
+      "document_format": null,
+      "requested_count": 3,
+      "requested": [
+        "document-format-default",
+        "document-format-preferred",
+        "document-format-supported"
+      ],
+      "advertised_printer_attributes": 2
+    },
+    {
+      "document_format": null,
+      "requested_count": 2,
+      "requested": [
+        "mopria-certified",
+        "printer-strings-languages-supported"
+      ],
+      "advertised_printer_attributes": 0
+    },
+    {
+      "document_format": "application/pdf",
+      "requested_count": 69,
+      "requested": [
+        "client-info-supported",
+        "compression-supported",
+        "document-format-default",
+        "document-format-details-supported",
+        "document-format-preferred",
+        "document-format-supported",
+        "job-impressions-supported",
+        "job-media-sheets-supported",
+        "job-pages-per-set-supported",
+        "job-password-encryption-supported",
+        "media-col-supported",
+        "media-supported",
+        "media-type-supported",
+        "mopria-certified",
+        "multiple-document-handling-supported",
+        "operations-supported",
+        "orientation-requested-supported",
+        "printer-is-accepting-jobs",
+        "printer-uuid",
+        "copies-default",
+        "copies-supported",
+        "media-col-database",
+        "media-col-default",
+        "media-col-ready",
+        "media-default",
+        "media-left-margin-supported",
+        "media-right-margin-supported",
+        "media-top-margin-supported",
+        "media-bottom-margin-supported",
+        "printer-firmware-name",
+        "printer-firmware-string-version",
+        "printer-make-and-model",
+        "printer-resolution-default",
+        "printer-resolution-supported",
+        "printer-uri-supported",
+        "print-quality-default",
+        "print-quality-supported",
+        "pwg-raster-document-resolution-supported",
+        "pwg-raster-document-type-supported",
+        "finishings-default",
+        "finishings-supported",
+        "job-password-supported",
+        "printer-mandatory-job-attributes",
+        "media-size-supported",
+        "media-source-default",
+        "media-source-supported",
+        "multiple-document-handling-default",
+        "number-up-default",
+        "number-up-supported",
+        "output-bin-default",
+        "output-bin-supported",
+        "orientation-requested-default",
+        "pclm-raster-back-side",
+        "pclm-source-resolution-supported",
+        "pdf-fit-to-page-default",
+        "pdf-fit-to-page-supported",
+        "pdf-k-octets-supported",
+        "presentation-direction-number-up-default",
+        "presentation-direction-number-up-supported",
+        "print-color-mode-default",
+        "print-color-mode-supported",
+        "printer-output-tray",
+        "pages-per-minute",
+        "pages-per-minute-color",
+        "print-scaling-default",
+        "print-scaling-supported",
+        "pwg-raster-document-sheet-back",
+        "sides-default",
+        "sides-supported"
+      ],
+      "advertised_printer_attributes": 40
+    }
+  ],
+  "product_defect": {
+    "file": "src/protocol.rs",
+    "site": "validate_envelope operation-attribute allowlist",
+    "before": "9 | 11 => key == \"requested-attributes\"",
+    "after": "11 => matches!(key, \"requested-attributes\" | \"document-format\"); 10 also accepts document-format",
+    "rejected_status": "client-error-document-format-not-supported (0x040a) with zero Printer Attributes",
+    "spec": "RFC 8011 \u00a74.2.5.1 Get-Printer-Attributes Request: Client MAY supply document-format, Printer MUST support it; a Printer that does not distinguish per-format sets MUST NOT distinguish in this operation"
+  },
+  "test_script_limitation": {
+    "symptom": ".NET PageResolutionCapability was empty although the driver document advertised ns0001:DPI300x300",
+    "cause": "typed .NET collection does not materialize the IPP keyword namespace; psk:ResolutionX/Y are psf:ScoredProperty name attributes, not element names",
+    "pre_existing": "the same check failed in run40769440761, so it measured the probe, not the product"
+  },
+  "not_measured": [
+    "document/job submission",
+    "physical paper",
+    "edge coverage",
+    "physical print quality",
+    "native IPP authentication",
+    "TLS",
+    "gallifrey CUPS queue behaviour"
+  ],
+  "counters": {
+    "native_local_job_count": 0,
+    "document_or_print_api_calls": 0
+  },
+  "cleanup": {
+    "zero_job_teardown_proven": true,
+    "owned_loopback_listener_ports_closed": true,
+    "owned_wsl_unregistered": true
+  }
+}

@@ -262,6 +262,45 @@ IPP authentication nor TLS. Earlier unknown errors remain unknown; the later
 bare-helper execution error was corrected without a measured PATH claim.
 The native failure remains agent-actionable diagnosis, not a platform verdict.
 
+The capability failure recorded above was then reproduced, attributed and
+re-tested. The real
+[native run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)
+built commit `6040a5a2fcdb89145703ca15807a9897f1832015` from this source tree
+inside owned WSL1, served it on literal loopback and added the queue with the
+same automatic Microsoft IPP Class Driver. `required_native_settings_pass` was
+true for all three requested settings: A3 297x420 mm `Borderless` at `High`
+quality with a zero-origin full-extent imageable area, A4 210x297 mm bordered
+with 3000 DIP margins, and A4 `TwoSidedLongEdge`; every validation reported
+`NoConflict` and kept copies 1 and Portrait.
+
+The driver's own PrintCapabilities document advertised
+`NorthAmericaLetter`/`ISOA3`/`ISOA4`, `Borderless`/`None`,
+`Draft`/`Normal`/`High`, `OneSided`/`TwoSidedShortEdge`/`TwoSidedLongEdge` and
+the `ns0001:DPI300x300` resolution option. The recorded frontend log carries the
+actual driver requests: `document-format="application/pdf"` with 69 requested
+attributes, twice, plus narrower re-reads of the format and Mopria attributes.
+
+That attribute is what the previous build rejected. The operation-attribute
+allowlist admitted only `requested-attributes` for Get-Printer-Attributes, so a
+conforming `document-format` produced
+`client-error-document-format-not-supported` and zero Printer Attributes, while
+RFC 8011 §4.2.5.1 requires the Printer to support the attribute and requires an
+identical answer when it does not distinguish per-format sets. The fix accepts
+the value without narrowing the capability set and invents no value; unknown
+formats receive the same general set. Get-Jobs tolerates it as a documented
+no-op filter. The previously reported "missing" A3, quality and duplex were the
+driver's fallback after that rejection, not absent frontend capabilities.
+
+Two limits belong to this evidence. The resolution exposure check reads the
+driver's own `psf:ScoredProperty` names rather than .NET's typed
+`PageResolutionCapability`, which does not materialize the IPP keyword
+namespace; the earlier check failed identically in run40769440761 and measured
+the probe. And every value here is native Print Schema capability and
+validated-ticket metadata: no document was sent, no job was created, and no
+paper, edge coverage, physical quality, native IPP authentication or TLS was
+measured. Native jobs, the frontend ledger and refused operations were zero and
+owned cleanup, port closure and driver registration restoration passed.
+
 The later [bounded observation40783698573](https://github.com/ressl/ferriprint/actions/runs/40783698573)
 again passed version/init/runtime/HTTP roles, but its initial all-thread
 attachment was followed by `THREAD_COVERAGE_LOST`. No public-GPA canary was
