@@ -320,6 +320,53 @@ stop, trace/canary or native Add occurred. Final native jobs0 did not prove the
 unknown final ledger zero; runtime was preserved and known-head source cleanup
 passed separately. The last actual native settings failure remains unchanged.
 
+The [protected-observer run41059953486](https://github.com/ressl/ferriprint/actions/runs/41059953486)
+superseded that blocked observation path on hosted Windows Server2025 x64. The
+protected read-only ledger snapshot now runs only after the owned frontend has
+exited, so no concurrent product connection holds the shared-memory DMS byte.
+It returned `job_row_count=0`, `active_row_count=0`, `maximum_job_id=null`,
+`sqlite_sequence_jobs=null` and a measured `time_origin`, with
+`read_only_normal_WAL_snapshot=true` and no retry-counter block at all; the
+earlier `SQLITE_PROTOCOL` primary15/extended15 no longer occurs. No lock type,
+lock range, retry limit, DMS race guard, read-only flag or permission was
+changed to achieve this.
+
+The same run captured the observer's own socket view for the first time:
+`startup_identity_and_state_proven=true`, `capture_complete=true`,
+`restart_preservation_required=false`, `unparsed_calls=0`,
+`dropped_trace_bytes=0`, and one validated canary transaction (POST,
+operation11, HTTP200, IPP status0, matching request id, `OWNED`
+authority/path/printer-uri, no Authorization header). Seven native
+transactions were projected. Two decoder defects had to be fixed first and are
+recorded because they were real, measured defects rather than environment
+limits: strace right-aligns its result column, and `strace -yy` appends a
+device-class tag such as `<char 1:3>` to descriptor annotations on arguments
+and on returned descriptors. Both are documented strace output shapes; every
+other nesting and malformed annotation is still rejected, and each rejected
+line still fails closed. A separate defect dropped a request from the
+transaction queue before it could be matched to its response, which reported
+one rejected request twice.
+
+Native Add succeeded and selected the pre-existing Microsoft IPP Class Driver,
+and the native `GetPrintCapabilities`/`MergeAndValidatePrintTicket` API ran. The
+driver's answer for this published 0.3.0 ELF was `NorthAmericaLetter` and
+`ISOA4` only, with an **empty** quality set, **empty** duplex set, no borderless
+capability and no printed feature list; the required A3/borderless/High and
+A4/duplex semantics are therefore still not preserved and that check still
+fails. This is a property of the published artifact under test, not of the
+observer: a separate source-build harness on hosted Windows Server2025, running
+a frontend built from a commit that carries the reviewed
+`ipp-attribute-fidelity` and `Get-Printer-Attributes document-format` fixes
+([run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)),
+reported `ISOA3`, `Normal/Draft/High`,
+`OneSided/TwoSidedShortEdge/TwoSidedLongEdge`, `Borderless/None`, 300x300 DPI
+and twelve features, and all three recipes validated with `NoConflict`. Final
+native jobs were0, document/print API calls were0, and owned cleanup closed the
+loopback listeners, unregistered the owned distro, restored the inbox driver
+registration and preserved both the original printers and the default. No
+physical paper output was produced or claimed, and nothing here generalises to
+other Windows versions.
+
 A metadata-only receiver's fixed `jobs=[]` / `document_bytes=0` fields are design
 invariants, not independently measured document counters. Real native/frontend
 ledgers, spool state and refused-operation counts are recorded separately.

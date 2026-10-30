@@ -34,7 +34,7 @@ IPP login, an emitted job ticket and measured paper are separate evidence layers
 | --- | --- | --- |
 | Physical macOS27.0.1 arm64, fresh Default/Add/automatic Use | The real native panel displayed all three site recipes. Manual A3 zero-margin/Best-quality and duplex controls were observed; selecting the A3 named recipe changed quality/sides | Its observed Paper Size remainedA4 and Paper Handling destination was disabled. No complete A3 GUI ticket or output was produced; no Apple/server/driver root cause or universal preset behavior is inferred |
 | Independent hosted native macOS15.7.9 arm64 | [Run40713530309](https://github.com/ressl/ferriprint/actions/runs/40713530309): actual local CUPS generated A3 29700x42000 with all margins0, High5 and both duplex options; a fresh ordinary user separately passed system-libcups GPA and three strict Validate requests | Actual `VirtualMac2,1` / `Apple M1 (Virtual)`, not another physical Mac. Source-built Mach-O from unchanged503, not the Linux release ELF or a macOS server package; no native Print-auth or output proof |
-| Hosted Windows Server2025 x64 | [Run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761): owned WSL1/direct-exec build, absolute-helper guard, exact public version, real managed init/runtime and HTTP role checks passed. Native Add automatically selected Microsoft IPP Class Driver | Full native settings acceptance **failed**: native capabilities omitted A3, quality and duplex; validated A4 tickets did not preserve the required quality/duplex or bordered imageable area. Native jobs, frontend ledger and refused-operation counts were measured zero; owned cleanup passed. This is not a Windows incompatibility verdict |
+| Hosted Windows Server2025 x64 | [Run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761) passed owned WSL1/direct-exec build, absolute-helper guard, exact public version, real managed init/runtime and HTTP role checks, and native Add selected Microsoft IPP Class Driver. [Run41059953486](https://github.com/ressl/ferriprint/actions/runs/41059953486) added the protected zero-ledger snapshot and full socket observation on the same hosted image | Full native settings acceptance **failed** for the published 0.3.0 artifact: its driver answer contained only Letter and A4, with empty quality, empty duplex, no borderless capability and no feature list, so A3/borderless/High and A4/duplex are not preserved. Native jobs and document calls were zero and owned cleanup passed. The gap tracks the artifact, not the platform: a source build with the reviewed fidelity and `document-format` fixes offered A3/quality/duplex/borderless/300x300/12 features in a separate harness. Not a Windows incompatibility verdict |
 
 The preceding [Windows run40746710278](https://github.com/ressl/ferriprint/actions/runs/40746710278),
 [classifier run40755062052](https://github.com/ressl/ferriprint/actions/runs/40755062052)
@@ -91,6 +91,22 @@ report usable for the protected observer; a conformant existing locking/output
 path on an authorized environment is required without bypassing the corruption
 guard. This is not a blanket Windows/WSL incompatibility or native-pass claim.
 No frontend stop/native Add occurred and the unknown final ledger was preserved.
+
+The [protected-observer run41059953486](https://github.com/ressl/ferriprint/actions/runs/41059953486)
+resolved that observation boundary on hosted Windows Server2025 x64 without
+touching it: the read-only ledger snapshot now runs only after the owned
+frontend exits, so it involves no competing holder, and the recorded
+`F_GETLK` output field is labelled as the caller's own unchanged sentinel
+rather than as a reported holder. The snapshot returned a zero ledger with every
+identity field measured, and the observer captured its own socket view for the
+first time (`capture_complete=true`, zero unparsed calls, one validated canary,
+seven native transactions). Native Add selected the Microsoft IPP Class Driver
+and the native capability API ran, but the published artifact under test offered
+only Letter and A4 with no quality, duplex or borderless capability, so the
+required settings still fail there. A source-built frontend carrying the
+reviewed fidelity and `document-format` fixes offered the full set in a separate
+harness. No lock, retry, guard or corruption protection was changed, and this is
+not a Windows-version verdict or a native-pass claim.
 
 The physical Mac's missing generated-PPD `APPrinterPreset` entries did not prevent
 those three recipes appearing. Its observed A4/disabled-destination limitation
@@ -317,7 +333,7 @@ supersede that session-access blocker, with their separate A4/recipe limitation.
 | A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
 | Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
 | Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
-| Windows native capabilities/settings | Real runtime/HTTP roles and automatic Microsoft IPP Class Driver Add passed; full native settings failed. The later protected observer stopped at an unusable/unverified GETLK conflict-report boundary before frontend stop or native Add | This observation path requires an authorized environment/call chain with trustworthy conformant locking output, without bypassing the safety guard. The original missing A3/quality/duplex/A4-border settings and driver-response evidence remain unresolved; the direct GPA is not the driver's response. No blanket Windows/WSL incompatibility or native pass is inferred |
+| Windows native capabilities/settings | Real runtime/HTTP roles, protected zero-ledger snapshot, full socket observation, automatic Microsoft IPP Class Driver Add and the native capability API all passed on Server2025 x64. Full native settings still fail for the published 0.3.0 artifact: the driver offered only Letter/A4 with no quality, duplex or borderless capability, and no A3 | The driver's answer is now measured instead of inferred, and it is artifact-specific: a source-built frontend carrying the reviewed fidelity and `document-format` fixes offered A3, quality, duplex, borderless, 300x300 and twelve features in a separate harness. Closing the gap on the published artifact needs a new reviewed build; direct GPA output is still not the driver's answer. Physical paper, other Windows versions and blanket compatibility remain unproven |
 | More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
 These are scoped evidence prerequisites, not permanent claims that platforms
