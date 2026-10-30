@@ -1,0 +1,62 @@
+name: Native Windows source-build capability acceptance
+
+on:
+  push:
+    branches:
+      - win-native-caps-capability-format
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win-native-caps-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-windows:
+    # One actual run only: attempt 1, this repository, this exact branch.
+    if: github.repository == 'ressl/ferriprint' && github.ref == 'refs/heads/win-native-caps-capability-format' && github.run_attempt == 1
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      QA_SOURCE_SHA: ${{ github.sha }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Stage the reviewed QA drivers from this checkout
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:QA_WORK = Join-Path $env:RUNNER_TEMP ('ferriprint-win-native-' + $env:GITHUB_RUN_ID)
+          if (Test-Path -LiteralPath $env:QA_WORK) { throw 'Owned run directory already exists; no reuse/reset' }
+          New-Item -ItemType Directory -Path (Join-Path $env:QA_WORK 'proof') -Force | Out-Null
+          ('QA_WORK=' + $env:QA_WORK) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'qa/windows/win-native-acceptance.ps1') -Destination $env:QA_WORK
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'qa/windows/win-native-capabilities.ps1') -Destination $env:QA_WORK
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'qa/windows/win-native-build.sh') -Destination $env:QA_WORK
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'qa/windows/windows-wsl-metadata.ps1') -Destination $env:QA_WORK
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'qa/windows/windows-public-choices.toml') -Destination (Join-Path $env:QA_WORK 'choices.toml')
+          # The WSL build consumes the same checkout, copied into the distro by the driver.
+          New-Item -ItemType Directory -Path (Join-Path $env:QA_WORK 'source') -Force | Out-Null
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE '*') -Destination (Join-Path $env:QA_WORK 'source') -Recurse -Force -Exclude '.git'
+          [ordered]@{
+            commit = $env:QA_SOURCE_SHA
+            tested_artifact = 'source build of this checkout inside owned WSL1; not a published release'
+            inputs = @('win-native-acceptance.ps1','win-native-capabilities.ps1','win-native-build.sh','windows-wsl-metadata.ps1','windows-public-choices.toml')
+          } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $env:QA_WORK 'proof/staged-inputs.json') -Encoding UTF8
+      - name: Native Windows IPP class-driver capabilities against the built frontend
+        timeout-minutes: 38
+        run: |
+          & (Join-Path $env:QA_WORK 'win-native-acceptance.ps1') -Work $env:QA_WORK
+      - name: Retain the exact driver response and receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: win-native-caps-${{ github.run_id }}
+          path: ${{ runner.temp }}/ferriprint-win-native-${{ github.run_id }}/proof/
+          if-no-files-found: warn
+          retention-days: 7
