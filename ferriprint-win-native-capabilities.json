@@ -447,6 +447,12 @@
       "head": "298598c",
       "result": "success",
       "cause": "after ordinary revert; gate passes again"
+    },
+    {
+      "run_id": 41055550190,
+      "head": "886d563",
+      "result": "success",
+      "cause": "branch HEAD; gate passes"
     }
   ],
   "discrimination_probe": {
@@ -542,5 +548,14 @@
     "is_windows_cause": false,
     "why_not": "the Windows gate sends no Job ticket at all (only Get-Printer-Attributes 0x000B), so job-priority/finishings never reach the frontend",
     "retained_because": "it is a real RFC deviation for clients that do submit best-effort Jobs"
+  },
+  "final_head_run": {
+    "run_id": 41055550190,
+    "url": "https://github.com/ressl/ferriprint/actions/runs/41055550190",
+    "head_sha": "886d563e9747edbfc886bd2e5a8b434ba8c7406f",
+    "attempt": 1,
+    "result": "success",
+    "required_native_settings_pass": true,
+    "note": "the branch HEAD itself passes, so the recorded state and the verified state are the same commit"
   }
 }
