@@ -38,7 +38,7 @@ jobs:
           New-Item -ItemType Directory -Path $proof | Out-Null
           $inputs = [ordered]@{
             'windows-wsl-acceptance.ps1' = '27385d44462ac49dc7f480c44da17c806cac06f6375730764dbdc7df81231c28'
-            'windows-wsl-bootstrap.sh' = 'b1e05a91084f9ff0a0ede721c4951faa3d2102c0789a71da7b92fd90416d0dcd'
+            'windows-wsl-bootstrap.sh' = 'f68a7ea8095fb619cf04052161d8c2022273b69d1f8090a47439aeb99376e96f'
             'windows-native-capabilities.ps1' = 'fedebbaaac279daaeb471af9461da13d730e46fe09ac54f90c8e7f2c74f6595b'
             'windows-wsl-cleanup.ps1' = '47769b3956d248b2aef201bbc926cec302323c5e08b2bfe097f032d160a7b051'
             'windows-wsl-metadata.ps1' = '7bba0747899ffdd49465ea8a2872a3f138b8a3109a407465f977f9e67e6e0f87'
