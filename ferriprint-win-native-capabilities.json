@@ -435,6 +435,18 @@
       "head": "41f3a0e",
       "result": "success",
       "cause": "reproduction after docs"
+    },
+    {
+      "run_id": 41054014404,
+      "head": "9398d43",
+      "result": "failure",
+      "cause": "deliberate discrimination probe: pre-fix allowlist restored; failed with the original symptom set by design"
+    },
+    {
+      "run_id": 41054938905,
+      "head": "298598c",
+      "result": "success",
+      "cause": "after ordinary revert; gate passes again"
     }
   ],
   "discrimination_probe": {
@@ -467,7 +479,42 @@
       "frontend_log": "no document-format=\"application/pdf\" request at all; the driver was rejected before it asked for capabilities",
       "symptom_match": "reproduces the originally reported failure state exactly (A3 missing, empty quality/duplex, A4 tickets not preserving quality/duplex/imageable area)"
     },
-    "reverted_by": "26595ac (ordinary git revert, no force-push); diff against a83c5ae is empty for src/ and tests/"
+    "reverted_by": "26595ac (ordinary git revert, no force-push); diff against a83c5ae is empty for src/ and tests/",
+    "revert_confirmation_run": {
+      "run_id": 41054938905,
+      "url": "https://github.com/ressl/ferriprint/actions/runs/41054938905",
+      "head_sha": "298598c5b24323879440c277217e5d2f3f94f83a",
+      "result": "success",
+      "required_native_settings_pass": true,
+      "driver_offered": {
+        "media": [
+          "NorthAmericaLetter",
+          "ISOA3",
+          "ISOA4"
+        ],
+        "quality": [
+          "Normal",
+          "Draft",
+          "High"
+        ],
+        "duplex": [
+          "OneSided",
+          "TwoSidedShortEdge",
+          "TwoSidedLongEdge"
+        ],
+        "borderless": [
+          "Borderless",
+          "None"
+        ]
+      },
+      "note": "after the ordinary revert the same gate passes again, so the green/red/green cycle is attributable to the allowlist alone"
+    },
+    "cycle": [
+      "a83c5ae green",
+      "9398d43 red",
+      "26595ac revert",
+      "298598c green"
+    ]
   },
   "artifact_identity": {
     "tested_object": "source build of commit 6040a5a2fcdb89145703ca15807a9897f1832015 inside owned WSL1",
