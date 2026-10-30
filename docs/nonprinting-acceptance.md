@@ -353,14 +353,26 @@ driver's answer for this published 0.3.0 ELF was `NorthAmericaLetter` and
 `ISOA4` only, with an **empty** quality set, **empty** duplex set, no borderless
 capability and no printed feature list; the required A3/borderless/High and
 A4/duplex semantics are therefore still not preserved and that check still
-fails. This is a property of the published artifact under test, not of the
-observer: a separate source-build harness on hosted Windows Server2025, running
-a frontend built from a commit that carries the reviewed
-`ipp-attribute-fidelity` and `Get-Printer-Attributes document-format` fixes
-([run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)),
-reported `ISOA3`, `Normal/Draft/High`,
-`OneSided/TwoSidedShortEdge/TwoSidedLongEdge`, `Borderless/None`, 300x300 DPI
-and twelve features, and all three recipes validated with `NoConflict`. Final
+fails. This is a property of the artifact under test, **not** a platform
+boundary and **not** an observer defect: this preview run exercises the frozen
+0.3.0 ELF, which predates the reviewed `ipp-attribute-fidelity` and
+`Get-Printer-Attributes document-format` fixes, so 0.3.0 cannot offer these
+capabilities and nothing here suggests it can.
+
+The capability acceptance itself already passes on a candidate build. A separate
+source-build harness on hosted Windows Server2025 builds the checked-out
+revision and runs it against the same native Windows API. On
+[run41056159451](https://github.com/ressl/ferriprint/actions/runs/41056159451)
+the build from candidate revision `b9fcb2987925261ea7da32502f2df10e49811c34`
+([branch `win-native-caps-capability-format`](https://github.com/ressl/ferriprint/tree/win-native-caps-capability-format))
+reported `NorthAmericaLetter/ISOA3/ISOA4`, `Normal/Draft/High`,
+`OneSided/TwoSidedShortEdge/TwoSidedLongEdge`, `Borderless/None`, 300x300 DPI and
+twelve printed features, and all three recipes validated with `NoConflict` and
+`required_native_settings_pass=true`. Its predecessor
+[run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435) on
+revision `6040a5a2` reported the same capability set. Those two runs are the
+capability acceptance; this preview run's role is to prove the protected
+observation path against a released artifact. Final
 native jobs were0, document/print API calls were0, and owned cleanup closed the
 loopback listeners, unregistered the owned distro, restored the inbox driver
 registration and preserved both the original printers and the default. No

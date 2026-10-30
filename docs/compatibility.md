@@ -103,10 +103,18 @@ first time (`capture_complete=true`, zero unparsed calls, one validated canary,
 seven native transactions). Native Add selected the Microsoft IPP Class Driver
 and the native capability API ran, but the published artifact under test offered
 only Letter and A4 with no quality, duplex or borderless capability, so the
-required settings still fail there. A source-built frontend carrying the
-reviewed fidelity and `document-format` fixes offered the full set in a separate
-harness. No lock, retry, guard or corruption protection was changed, and this is
-not a Windows-version verdict or a native-pass claim.
+required settings still fail there, because that preview run exercises the frozen
+0.3.0 ELF which predates the reviewed fidelity and `document-format` fixes; this
+is an artifact boundary, not a platform limit and not an observer defect. The
+capability acceptance itself passes on a candidate build: the source-build
+harness on the same hosted image validated all three recipes with
+`NoConflict` and `required_native_settings_pass=true` for revision `b9fcb29`
+([run41056159451](https://github.com/ressl/ferriprint/actions/runs/41056159451))
+and revision `6040a5a2`
+([run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)),
+both offering A3, quality, duplex, borderless, 300x300 and twelve features. No
+lock, retry, guard or corruption protection was changed, and this is not a
+Windows-version verdict or a native-pass claim for 0.3.0.
 
 The physical Mac's missing generated-PPD `APPrinterPreset` entries did not prevent
 those three recipes appearing. Its observed A4/disabled-destination limitation
@@ -333,7 +341,7 @@ supersede that session-access blocker, with their separate A4/recipe limitation.
 | A second physical Mac | An independent hosted native Mac VM passed the scoped check above. An existing private Darwin runner's matching online/idle metadata did not produce an assigned metadata job or establish usable capacity | Separately identified physical hardware and an authorized native session; no trusted execution/host-identity channel was established for that runner. Do not infer offline lifecycle from its label/contact age |
 | Real iPhone | Bounded connected-device enumeration found no usable attached device; no authorized mirroring/physical native print UI/model/OS session was available | An already trusted accessible real iPhone native print session; no pairing, permission or app change was made |
 | Real iPad | No usable attached iPad or authorized physical native print session was observed | An already trusted accessible real iPad session, separately from iPhone; iPhone Mirroring and simulators do not qualify |
-| Windows native capabilities/settings | Real runtime/HTTP roles, protected zero-ledger snapshot, full socket observation, automatic Microsoft IPP Class Driver Add and the native capability API all passed on Server2025 x64. Full native settings still fail for the published 0.3.0 artifact: the driver offered only Letter/A4 with no quality, duplex or borderless capability, and no A3 | The driver's answer is now measured instead of inferred, and it is artifact-specific: a source-built frontend carrying the reviewed fidelity and `document-format` fixes offered A3, quality, duplex, borderless, 300x300 and twelve features in a separate harness. Closing the gap on the published artifact needs a new reviewed build; direct GPA output is still not the driver's answer. Physical paper, other Windows versions and blanket compatibility remain unproven |
+| Windows native capabilities/settings | **Capability acceptance passes on a candidate build**: revision `b9fcb29` ([run41056159451](https://github.com/ressl/ferriprint/actions/runs/41056159451)) and `6040a5a2` ([run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435)) both validated A3/borderless/High and A4/duplex with `NoConflict` against the real native API. The protected observation path is also proven on Server2025 x64: zero-ledger snapshot, full socket capture with validated canary, native Add with Microsoft IPP Class Driver and the native capability API | The frozen 0.3.0 ELF still fails full native settings: it offers only Letter/A4 with empty quality, duplex and borderless, because it predates the reviewed fidelity and `document-format` fixes. That is an artifact boundary, not a platform limit; 0.3.0 cannot offer these capabilities and a new reviewed build is required to publish them. Direct GPA output is still not the driver's answer, and physical paper, other Windows versions and blanket compatibility remain unproven |
 | More real printer models / measured paper quality | The three real native destinations/backend paths are one Epson ET-16600; synthetic fixtures do not add models and unknown tray counts are not measured stock | Another identified model with its preexisting queue/driver; physical output needs separate approval, actual known stock and an available paper/ruler/scan handling path |
 
 These are scoped evidence prerequisites, not permanent claims that platforms
