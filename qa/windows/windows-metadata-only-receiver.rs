@@ -2616,17 +2616,27 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
             _ => json!({"value_type_id":"OTHER"}),
         })
     }
-    fn keywords(v: &IppValue) -> Result<Vec<String>> {
-        match v {
-            IppValue::Keyword(v) if v.len()<=128 &&
-                v.as_str().bytes().all(|c|c.is_ascii_lowercase()||c.is_ascii_digit()||c==b'-') => Ok(vec![v.to_string()]),
-            IppValue::Array(v) if v.len()<=128 => {
-                let mut result=Vec::new();
-                for value in v {result.extend(keywords(value)?);}
-                Ok(result)
-            },
-            _ => Err("REQUESTED_ATTRIBUTE_NAME"),
+    // RFC 8011 §4.1.4 lists requested-attributes as 1setOf keyword, but a client
+    // may legally send a larger or differently typed value. Reporting which kinds
+    // arrived is the observation this recorder wants; treating an unexpected type
+    // as a hard parse failure loses the whole transaction. Names are still only
+    // kept when they are well-formed keywords, and the type is reported otherwise.
+    fn keywords(v: &IppValue) -> Vec<String> {
+        fn walk(v:&IppValue,out:&mut Vec<String>) {
+            match v {
+                IppValue::Keyword(v) if v.len()<=128 &&
+                    v.as_str().bytes().all(|c|c.is_ascii_lowercase()||c.is_ascii_digit()||c==b'-') =>
+                        out.push(v.to_string()),
+                IppValue::Array(v) if v.len()<=128 => { for value in v { walk(value,out); } },
+                IppValue::Keyword(_) => out.push("MALFORMED_KEYWORD".to_string()),
+                IppValue::TextWithoutLanguage(_) | IppValue::TextWithLanguage { .. } => out.push("TEXT".to_string()),
+                IppValue::Uri(_) => out.push("URI".to_string()),
+                _ => out.push("OTHER_TYPE".to_string()),
+            }
         }
+        let mut out=Vec::new();
+        walk(v,&mut out);
+        out
     }
     impl Recorder {
         fn new(root:u32)->Result<Self> {
@@ -2722,7 +2732,7 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                     result["request_printer_uri_match_id"] = json!(match attr(&m,"printer-uri") {
                         Some(IppValue::Uri(v)) if v.as_str()==URI => "OWNED", None=>"MISSING",_=>"OTHER"
                     });
-                    if let Some(v) = attr(&m,"requested-attributes") { result["requested_attributes"]=json!(keywords(v)?); }
+                    if let Some(v) = attr(&m,"requested-attributes") { result["requested_attributes"]=json!(keywords(v)); }
                     result["document_format_id"] = json!(match attr(&m,"document-format") {
                         None=>"MISSING", Some(IppValue::MimeMediaType(v)) => match v.as_str() {
                             "application/pdf"=>"PDF","image/pwg-raster"=>"PWG","image/urf"=>"URF",
