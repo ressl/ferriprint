@@ -231,12 +231,32 @@ pub fn validate_envelope(
                     | "document-natural-language"
                     | "last-document"
             ),
-            // DISCRIMINATION PROBE: the pre-fix allowlist, restored only for one
-            // experiment run. It must make the native Windows acceptance fail.
-            9 | 11 => key == "requested-attributes",
+            // RFC 8011 §4.2.5.1: on Get-Printer-Attributes the Client MAY supply
+            // "document-format" and the Printer MUST support it. Windows IPP
+            // class-driver clients send it while adding a queue; rejecting it
+            // returned client-error-document-format-not-supported with zero
+            // Printer Attributes, so the driver fell back to its own defaults.
+            //
+            // The value is accepted but does not narrow the answer. This frontend
+            // keeps one capability set: every configured format is resolved
+            // against the same media/quality/sides tables, so the attribute sets
+            // cannot differ per format. RFC 8011 §4.2.5.1 then requires identical
+            // answers ("MUST NOT distinguish between different Document formats")
+            // instead of a narrowed or withheld set. An unrecognised format is
+            // therefore answered with the general set rather than rejected: the
+            // request asks which capabilities relate to that format, and the
+            // truthful answer here is "the same ones". No per-format value is
+            // invented.
+            //
+            // Get-Jobs (§4.2.6.1) lists "document-format" as neither requested
+            // nor required; it is tolerated as a no-op filter because this printer
+            // keeps one capability set per Job as well, and Get-Jobs selects Jobs
+            // by state/owner only.
+            11 => matches!(key, "requested-attributes" | "document-format"),
+            9 => key == "requested-attributes",
             10 => matches!(
                 key,
-                "requested-attributes" | "which-jobs" | "my-jobs" | "limit"
+                "requested-attributes" | "which-jobs" | "my-jobs" | "limit" | "document-format"
             ),
             _ => false,
         };
