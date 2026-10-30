@@ -2573,6 +2573,7 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
         attachment_proven:bool,thread_coverage_loss:Option<Value>,tracer_lifecycle:Option<Value>,session_ownership:Option<Value>,
         startup_proof:Option<Value>,exec_identity:Option<Value>,startup_identity_and_state_proven:bool,restart_preservation_required:bool,
         io_guard_records:Vec<Value>,io_guard_total:u64,strace_diagnostic_literal_counts:BTreeMap<&'static str,u64>,
+        failure_shapes:BTreeMap<String,u64>,
         records:Vec<Value>,canary:Option<Value>,failures:Vec<&'static str>,read_bytes:u64,write_bytes:u64,dropped:u64,unparsed:u64,
         interim:u64,unexpected:bool,runtime:tokio::runtime::Runtime,
     }
@@ -2622,11 +2623,35 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                 allowed_threads:std::collections::BTreeSet::from([root]),baseline_threads:Vec::new(),attachment_proven:false,
                 thread_coverage_loss:None,tracer_lifecycle:None,session_ownership:None,startup_proof:None,exec_identity:None,
                 startup_identity_and_state_proven:false,restart_preservation_required:true,io_guard_records:Vec::new(),io_guard_total:0,
-                strace_diagnostic_literal_counts:BTreeMap::new(),records:Vec::new(),canary:None,failures:Vec::new(),
+                strace_diagnostic_literal_counts:BTreeMap::new(),failure_shapes:BTreeMap::new(),records:Vec::new(),canary:None,failures:Vec::new(),
                 read_bytes:0,write_bytes:0,dropped:0,unparsed:0,interim:0,unexpected:false,
                 runtime:tokio::runtime::Builder::new_current_thread().build().map_err(|_|"PARSER_RUNTIME")?})
         }
         fn fail(&mut self, id: &'static str) { self.restart_preservation_required=true; if !self.failures.contains(&id) { self.failures.push(id); } }
+        // Fixed-shape classification of a rejected trace line. Only enumerations and
+        // counts leave the process; no syscall text, path, address or payload is kept.
+        fn note_shape(&mut self, id:&'static str, text:&str) {
+            let shape = if text.starts_with("[pid ") { "PID_BRACKET" }
+                else if text.starts_with("<... ") { "RESUMED" }
+                else if text.contains("<unfinished ...>") { "UNFINISHED" }
+                else { "OTHER" };
+            let grammar = if !text.contains('(') { "NO_LPAREN" }
+                else if !text.contains(')') { "NO_RPAREN" }
+                else if text.contains(") = ") { "TIGHT_EQUALS" }
+                else if text.contains(") =") { "PADDED_EQUALS" }
+                else { "NO_EQUALS" };
+            let call:&str = text.split_once('(').map(|v|v.0.rsplit_once(']').map(|x|x.1.trim()).unwrap_or(v.0.trim()))
+                .map(|name| match name {
+                    "read"|"readv"|"recvfrom"|"recvmsg"|"write"|"writev"|"sendto"|"sendmsg" => "IO",
+                    "socket"|"socketpair"|"bind"|"listen"|"connect"|"accept"|"accept4" => "SOCKET",
+                    "open"|"openat"|"openat2"|"creat"|"close"|"close_range"|"dup"|"dup2"|"dup3"|"fcntl" => "FD",
+                    "clone"|"clone3"|"fork"|"vfork"|"unshare"|"execve"|"execveat" => "PROC",
+                    "pipe"|"pipe2"|"eventfd"|"eventfd2"|"signalfd"|"signalfd4"|"timerfd_create"|"epoll_create"|"epoll_create1" => "HANDLE",
+                    _ => "UNKNOWN_SYSCALL" }).unwrap_or("NO_CALL");
+            let bucket=format!("{id}|{shape}|{grammar}|{call}");
+            let entry=self.failure_shapes.entry(bucket).or_insert(0u64);
+            if *entry!=u64::MAX { *entry+=1; }
+        }
         fn ipp(&self, body: &[u8]) -> Result<IppRequestResponse> {
             let mut input = body;
             let parsed = self.runtime.block_on(read_metadata(&mut input, LIMIT)).map_err(|_| "IPP_METADATA")?;
@@ -2830,6 +2855,7 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                 "native_transactions":self.records,"native_socket_read_bytes":self.read_bytes,
                 "native_socket_write_bytes":self.write_bytes,"interim_100_count":self.interim,
                 "dropped_trace_bytes":self.dropped,"unparsed_calls":self.unparsed,
+                "unparsed_shape_counts":self.failure_shapes,
                 "buffered_http_bytes":buffered,"pending_http_requests":pending_http,
                 "failure_ids":self.failures,"unexpected_mutating_or_unknown_operation":self.unexpected,
                 "capture_complete":self.startup_identity_and_state_proven && !self.restart_preservation_required && self.origins.listener_ready() && disarmed && self.canary.is_some() && self.failures.is_empty() &&
@@ -3095,7 +3121,7 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                                 else {
                                     let mut state=shared.lock().map_err(|_|"RECORDER_LOCK")?;
                                     match std::str::from_utf8(&line) {
-                                        Ok(text)=>if let Err(id)=state.line(text){state.unparsed+=1;state.fail(id);},
+                                        Ok(text)=>if let Err(id)=state.line(text){state.unparsed+=1;state.fail(id);state.note_shape(id,text);},
                                         Err(_)=>state.fail("TRACE_ENCODING"),
                                     }
                                 }
