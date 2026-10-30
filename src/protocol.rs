@@ -457,6 +457,13 @@ pub fn printer_attributes(
     } = runtime;
     let g = DelimiterTag::PrinterAttributes;
     let d = &cap.defaults;
+    // Deliberately absent: `printer-device-id` (the real value carries a serial
+    // number, so any rewrite would be a false identity), `ipp-features-supported`
+    // (upstream values describe CUPS/device feature sets this frontend does not
+    // implement), and `finishings-/output-bin-supported` (Ferriprint has no
+    // finishing or output-bin semantics). `media-col-database` therefore carries
+    // size and margins only: a media x source x type cross-product would claim
+    // every tray accepts every stock, which neither observed source asserts.
     let mut attrs = vec![
         (
             "printer-uri-supported",

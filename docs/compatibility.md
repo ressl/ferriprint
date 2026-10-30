@@ -149,6 +149,47 @@ of the current physical ink or paper supply.
 | Direct-device TLS/SNMP | No new direct-device trust or SNMP source was needed for existing queue-provided markers | Never bypass TLS or invent a community; unavailable readings stay unknown |
 | Profile declared-ready | Operator declaration only | Never label it a live physical tray sensor |
 
+### Capability attributes Ferriprint deliberately omits
+
+Capability values come from the provisioned native PPD through
+`PrinterProfile::from_ppd`/`Capabilities` and are emitted by
+`protocol::printer_attributes`; live readings are a separate path
+(`telemetry::add_ipp`). Four upstream attributes are deliberately not emitted,
+because emitting them would assert something this frontend cannot back:
+
+- **`printer-device-id`** — the real device value carries `SN:` (a serial
+  number). Ferriprint does not publish serials; rewriting the field or
+  substituting a placeholder would make it a false device identity. The
+  Microsoft IPP Class Driver builds capabilities from `printer-make-and-model`,
+  `media-*`, `print-quality-supported`, `sides-supported` and
+  `print-color-mode-supported`, not from this attribute.
+- **`media-col-database` entries with `media-source`/`media-type`** — a
+  cross-product of media × sources × types would claim that every tray accepts
+  every size and stock. The observed queue and device both return size and
+  margins only, so Ferriprint matches upstream instead of inventing a matrix.
+  `media-col-default` legitimately carries source and type because it describes
+  one default job, not the supported set.
+- **`ipp-features-supported`** — the observed values (`ipp-everywhere`,
+  `airprint-1.8`, `wfds-print-1.0`, `subscription-object`) describe CUPS or the
+  device, not this frontend. Ferriprint implements none of those feature sets,
+  so the attribute stays absent rather than copied.
+- **`finishings-supported` / `output-bin-supported`** — `finishings-supported
+  = none` is the RFC default and `face-up` is a device property that Ferriprint
+  has no finishing or output-bin semantics for.
+
+### Live readings stay namespaced
+
+`telemetry::add_ipp` emits live values as `ferriprint-telemetry-*` and uses the
+original standard names only for a fresh (`freshness = fresh`) reading from an
+explicitly configured device endpoint (`source = device-ipp`). A native CUPS
+queue's cached metadata is not a sensor sample: the observed queue reported
+`media-ready = na_letter, na_legal` while the device itself reported `iso_a4,
+iso_a3` and the queue's `media-default` was `iso_a4`. Promoting such values to
+standard `media-ready` would tell clients that Letter/Legal is loaded. The
+namespaced attribute plus `ferriprint-telemetry-freshness`,
+`-freshness-scope` and `-physical-freshness` keeps the distinction visible to
+any client that chooses to read it.
+
 ## Final release evidence
 
 **Historical0.2 release checkpoint, 2026-10-27.** Its native amd64 quality gate
