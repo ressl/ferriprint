@@ -639,20 +639,21 @@ async fn handle<R: AsyncRead + Unpin + Send>(
     let owner = principal.username.as_str();
     match op {
         2 | 4 | 5 => {
-            let template = match protocol::template(request) {
+            let parsed = match protocol::template(request) {
                 Ok(t) => t,
                 Err(e) => return protocol::reject(request, e),
             };
             let format = attr(request, g, "document-format")
                 .and_then(str_value)
                 .unwrap_or(&printer.profile.capabilities().defaults.document_format);
-            let resolved = match printer.profile.resolve(&template, format) {
+            let resolved = match printer.profile.resolve(&parsed.job, format) {
                 Ok(resolved) => resolved,
                 Err(e) => {
                     return protocol::reject(request, protocol::profile_rejection(request, e));
                 }
             };
             if op == 4 {
+                protocol::mark_ignored(&mut reply, &parsed.ignored)?;
                 return Ok(reply);
             }
             match printer.upstream.inspect().await {
@@ -693,6 +694,7 @@ async fn handle<R: AsyncRead + Unpin + Send>(
                 app.engine.time_origin(),
                 app.engine.uptime(),
             )?;
+            protocol::mark_ignored(&mut reply, &parsed.ignored)?;
         }
         6 => {
             let job = match selected_job(app, id.context("missing job id")?, printer_name).await {
