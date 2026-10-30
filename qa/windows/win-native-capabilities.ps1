@@ -13,8 +13,14 @@ $queue = $server.GetPrintQueue($QueueName)
 try {
   $capabilities = $queue.GetPrintCapabilities()
   $capabilityXml = $queue.GetPrintCapabilitiesAsXml()
+  # Read the stream once, before it is copied and disposed: MemoryStream has no
+  # XML accessors, so the feature names come from a parsed copy of the same bytes.
+  $capabilityBytes = $capabilityXml.ToArray()
   $destination = [IO.File]::Create((Join-Path $ProofDirectory 'native-print-capabilities.xml'))
-  try { $capabilityXml.CopyTo($destination) } finally { $destination.Dispose(); $capabilityXml.Dispose() }
+  try { $destination.Write($capabilityBytes, 0, $capabilityBytes.Length) } finally { $destination.Dispose(); $capabilityXml.Dispose() }
+  $capabilityDocument = New-Object Xml.XmlDocument
+  $capabilityDocument.PreserveWhitespace = $false
+  $capabilityDocument.LoadXml([Text.Encoding]::UTF8.GetString($capabilityBytes))
   $base = $queue.DefaultPrintTicket
   $baseStream = [IO.File]::Create((Join-Path $ProofDirectory 'native-default-print-ticket.xml'))
   try { $base.SaveTo($baseStream) } finally { $baseStream.Dispose() }
@@ -123,7 +129,7 @@ try {
     native_imageable_size = $(if ($null -ne $capabilities.PageImageableArea) {
       [ordered]@{ origin_x_dip=$capabilities.PageImageableArea.OriginWidth; origin_y_dip=$capabilities.PageImageableArea.OriginHeight; width_dip=$capabilities.PageImageableArea.ExtentWidth; height_dip=$capabilities.PageImageableArea.ExtentHeight }
     } else { $null })
-    native_feature_names = @($capabilityXml.GetElementsByTagName('psf:Feature') | ForEach-Object { $_.GetAttribute('name') })
+    native_feature_names = @($capabilityDocument.GetElementsByTagName('psf:Feature') | ForEach-Object { $_.GetAttribute('name') })
     requested_and_actual_tickets = $results
     required_native_settings_pass = $requiredPassed
     imageable_area_is_native_API_metadata_not_physical_paper_measurement = $true
