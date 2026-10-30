@@ -395,5 +395,46 @@
     "zero_job_teardown_proven": true,
     "owned_loopback_listener_ports_closed": true,
     "owned_wsl_unregistered": true
-  }
+  },
+  "confirmation_run": {
+    "run_id": 41052473514,
+    "run_url": "https://github.com/ressl/ferriprint/actions/runs/41052473514",
+    "head_sha": "41f3a0e0a97c97ffbcac6c721fb90d7e076b9bc5",
+    "attempt": 1,
+    "rerun": false,
+    "result": "success",
+    "note": "second independent windows-2025 execution of the same gate after the documentation commit; identical pass, so the result is repeatable and not a one-off of run 41051572435"
+  },
+  "run_history": [
+    {
+      "run_id": 41048370849,
+      "head": "f723987",
+      "result": "failure",
+      "cause": "harness bootstrap: CRLF checkout made set -Eeuo pipefail fail; not a product result"
+    },
+    {
+      "run_id": 41049991107,
+      "head": "64ddca9",
+      "result": "failure",
+      "cause": "probe instrumentation: GetElementsByTagName on MemoryStream; the driver response in that run already showed A3/Borderless/High/Duplex"
+    },
+    {
+      "run_id": 41050870750,
+      "head": "6f3cad5",
+      "result": "failure",
+      "cause": "probe limitation: typed PageResolutionCapability empty for the IPP keyword namespace; all other semantics already passed"
+    },
+    {
+      "run_id": 41051572435,
+      "head": "6040a5a",
+      "result": "success",
+      "cause": "all three native settings preserved"
+    },
+    {
+      "run_id": 41052473514,
+      "head": "41f3a0e",
+      "result": "success",
+      "cause": "reproduction after docs"
+    }
+  ]
 }
