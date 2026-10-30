@@ -2648,7 +2648,27 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                     "clone"|"clone3"|"fork"|"vfork"|"unshare"|"execve"|"execveat" => "PROC",
                     "pipe"|"pipe2"|"eventfd"|"eventfd2"|"signalfd"|"signalfd4"|"timerfd_create"|"epoll_create"|"epoll_create1" => "HANDLE",
                     _ => "UNKNOWN_SYSCALL" }).unwrap_or("NO_CALL");
-            let bucket=format!("{id}|{shape}|{grammar}|{call}");
+            // Fixed-shape facts about the first angle annotation on the line. Only
+            // enumerations leave the process: no path, inode, address or payload.
+            let ann = text.find('<').map(|at| {
+                let rest=&text[at..];
+                let closed=rest.find('>').is_some();
+                let inner=rest.strip_prefix('<').and_then(|v|v.split_once('>').map(|x|x.0)).unwrap_or("");
+                let nested=inner.contains('<');
+                let prefix=inner.split_once(':').map(|v|v.0).unwrap_or("");
+                let kind = if inner.is_empty() { "EMPTY" }
+                    else if nested { "NESTED" }
+                    else if !closed { "UNCLOSED" }
+                    else { match prefix {
+                        "TCP"|"UDP"|"TCPv6"|"UDPv6"|"socket"|"UNIX"|"UNIX-STREAM"|"UNIX-DGRAM"|"NETLINK"|"PACKET" => "SOCKET_PREFIX",
+                        _ if prefix.is_empty() => "PLAIN",
+                        _ => "NAMED_PREFIX" } };
+                let tag = if inner.contains("<char ") { "CHAR_TAG" }
+                    else if inner.contains("<block ") { "BLOCK_TAG" }
+                    else if nested { "OTHER_NEST" } else { "NO_TAG" };
+                format!("{kind}/{tag}")
+            }).unwrap_or_else(|| "NO_ANGLE".to_string());
+            let bucket=format!("{id}|{shape}|{grammar}|{call}|{ann}");
             let entry=self.failure_shapes.entry(bucket).or_insert(0u64);
             if *entry!=u64::MAX { *entry+=1; }
         }
