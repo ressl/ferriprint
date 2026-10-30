@@ -1,0 +1,75 @@
+name: Native Windows LOCAL NONPRINTING acceptance
+
+on:
+  push:
+    branches:
+      - codex/observer-getlk-probe
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-windows-local-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-windows:
+    if: github.repository == 'ressl/ferriprint' && github.ref == 'refs/heads/codex/observer-getlk-probe' && github.run_attempt == 1
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      QA_SOURCE_SHA: ${{ github.sha }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Fetch and hash every Parent-reviewed public QA source
+        id: sources
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:QA_WORK = Join-Path $env:RUNNER_TEMP ('ferriprint-windows-local-qa-' + $env:GITHUB_RUN_ID)
+          ('QA_WORK=' + $env:QA_WORK) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($env:QA_SOURCE_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Invalid source commit identity' }
+          if (Test-Path -LiteralPath $env:QA_WORK) { throw 'Owned run directory already exists; no reuse/reset' }
+          New-Item -ItemType Directory -Path $env:QA_WORK | Out-Null
+          $proof = Join-Path $env:QA_WORK 'proof'
+          New-Item -ItemType Directory -Path $proof | Out-Null
+          $inputs = [ordered]@{
+            'windows-wsl-acceptance.ps1' = '27385d44462ac49dc7f480c44da17c806cac06f6375730764dbdc7df81231c28'
+            'windows-wsl-bootstrap.sh' = 'b1e4e796bb81d4e59f8da8774c631ba4d8bc0492c0e4909ced81f9137e08e0bd'
+            'windows-native-capabilities.ps1' = 'fedebbaaac279daaeb471af9461da13d730e46fe09ac54f90c8e7f2c74f6595b'
+            'windows-wsl-cleanup.ps1' = '47769b3956d248b2aef201bbc926cec302323c5e08b2bfe097f032d160a7b051'
+            'windows-wsl-metadata.ps1' = '7bba0747899ffdd49465ea8a2872a3f138b8a3109a407465f977f9e67e6e0f87'
+            'windows-metadata-only-receiver.rs' = '1c03a9fe479787e0276047d7fe94cba260c440bf60668775f5bb79cce89007f7'
+            'windows-public-choices.toml' = '6306e3814a2e9dc6ba7f51325e76fa8d6d11da77f5089ba8dfca4bec8399856e'
+            'reader-build/Cargo.toml' = '862e18a17153381c26e1d8773c7b947487d948efdd4c5b629231be4fd050893c'
+            'reader-build/Cargo.lock' = 'f2c921156198575070a9bf48776cc4e3d7058cd3e6bd3de800589a73fa74c44a'
+            'sqlite-wal-retry-counters.patch' = '5103121e96c0ce7bd490b0c401e9e29823368cff7d6397711a6537fe849865e9'
+          }
+          foreach ($inputFile in $inputs.GetEnumerator()) {
+            $url = 'https://raw.githubusercontent.com/ressl/ferriprint/' + $env:QA_SOURCE_SHA + '/qa/windows/' + $inputFile.Key
+            $path = Join-Path $env:QA_WORK $inputFile.Key
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path)) | Out-Null
+            Invoke-WebRequest -Uri $url -OutFile $path -TimeoutSec 60
+            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $inputFile.Value) { throw ('Reviewed source checksum mismatch: ' + $inputFile.Key) }
+          }
+          [ordered]@{ commit=$env:QA_SOURCE_SHA; sources=$inputs; no_checkout=$true; no_repository_secrets_or_variables=$true } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $proof 'reviewed-source-sha256.json') -Encoding UTF8
+      - name: Actual published Ferriprint in owned WSL1 and native Windows settings only
+        timeout-minutes: 15
+        run: |
+          & (Join-Path $env:QA_WORK 'windows-wsl-acceptance.ps1') -Work $env:QA_WORK
+      - name: Recover only owned resources even after failure
+        if: always() && steps.sources.outcome == 'success'
+        timeout-minutes: 2
+        run: |
+          & (Join-Path $env:QA_WORK 'windows-wsl-cleanup.ps1') -Work $env:QA_WORK
+      - name: Retain curated metadata and source identity evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-windows-local-nonprinting-${{ github.run_id }}
+          path: ${{ runner.temp }}/ferriprint-windows-local-qa-${{ github.run_id }}/proof/
+          if-no-files-found: warn
+          retention-days: 7

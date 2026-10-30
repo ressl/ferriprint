@@ -1,0 +1,118 @@
+"confirmed_native_mappings" = true
+
+["settings"]
+"schema_version" = 1
+"document_formats" = ["application/pdf", "image/jpeg", "image/png", "image/pwg-raster", "image/urf"]
+"resolutions" = [{ "x" = 300, "y" = 300 }]
+"declared_ready" = []
+
+["settings"."sources"]
+"main" = "Rear"
+"tray-1" = "Cassette"
+
+["settings"."media_types"]
+
+["settings"."media_types"."stationery"]
+
+["settings"."media_types"."stationery"."draft"]
+"MediaType" = "Plain"
+"Quality" = "Economy"
+
+["settings"."media_types"."stationery"."normal"]
+"MediaType" = "Plain"
+"Quality" = "Standard"
+
+["settings"."media_types"."stationery"."high"]
+"MediaType" = "Plain"
+"Quality" = "Fine"
+
+["settings"."media_types"."photographic-glossy"]
+
+["settings"."media_types"."photographic-glossy"."normal"]
+"MediaType" = "Photo"
+"Quality" = "Standard"
+
+["settings"."media_types"."photographic-glossy"."high"]
+"MediaType" = "Photo"
+"Quality" = "Fine"
+
+["settings"."color_modes"]
+
+["settings"."color_modes"."color"]
+"ColorModel" = "RGB"
+
+["settings"."color_modes"."monochrome"]
+"ColorModel" = "Gray"
+
+["settings"."sides"]
+
+["settings"."sides"."one-sided"]
+"Duplex" = "None"
+
+["settings"."sides"."two-sided-long-edge"]
+"Duplex" = "DuplexNoTumble"
+
+["settings"."sides"."two-sided-short-edge"]
+"Duplex" = "DuplexTumble"
+
+["settings"."defaults"]
+"media" = "iso_a4_210x297mm"
+"borderless" = false
+"source" = "main"
+"media_type" = "stationery"
+"quality" = 4
+"color_mode" = "color"
+"sides" = "one-sided"
+
+["settings"."recipes"]
+
+["settings"."recipes"."a3-borderless-high"]
+"display_name" = "A3 borderless / Plain paper / High / Portrait"
+"media" = "iso_a3_297x420mm"
+"borderless" = true
+"source" = "main"
+"media_type" = "stationery"
+"quality" = 5
+"color_mode" = "color"
+"sides" = "one-sided"
+"copies" = 1
+"orientation" = 3
+"print_scaling" = "none"
+
+["settings"."recipes"."a3-borderless-high"."resolution"]
+"x" = 300
+"y" = 300
+
+["settings"."recipes"."a4-duplex"]
+"display_name" = "A4 bordered / Plain paper / Normal / Portrait / Long-edge duplex"
+"media" = "iso_a4_210x297mm"
+"borderless" = false
+"source" = "main"
+"media_type" = "stationery"
+"quality" = 4
+"color_mode" = "color"
+"sides" = "two-sided-long-edge"
+"copies" = 1
+"orientation" = 3
+"print_scaling" = "none"
+
+["settings"."recipes"."a4-duplex"."resolution"]
+"x" = 300
+"y" = 300
+
+["settings"."recipes"."a4-normal"]
+"display_name" = "A4 bordered / Plain paper / Normal / Portrait"
+"media" = "iso_a4_210x297mm"
+"borderless" = false
+"source" = "main"
+"media_type" = "stationery"
+"quality" = 4
+"color_mode" = "color"
+"sides" = "one-sided"
+"copies" = 1
+"orientation" = 3
+"print_scaling" = "none"
+
+["settings"."recipes"."a4-normal"."resolution"]
+"x" = 300
+"y" = 300
