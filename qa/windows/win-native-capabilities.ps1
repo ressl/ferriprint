@@ -30,6 +30,7 @@ try {
     @{ key='a4-duplex'; media=[System.Printing.PageMediaSizeName]::ISOA4; quality=[System.Printing.OutputQuality]::Normal; duplex=[System.Printing.Duplexing]::TwoSidedLongEdge; borderless=$false }
   )
   $results = @()
+  $validatedXml = @{}
   foreach ($spec in $specs) {
     $requiredWidthMm = $(if ($spec.key -eq 'a3-borderless-high') { 297.0 } else { 210.0 })
     $requiredHeightMm = $(if ($spec.key -eq 'a3-borderless-high') { 420.0 } else { 297.0 })
@@ -48,6 +49,20 @@ try {
     $ticket.Duplexing = $spec.duplex
     $ticket.PageOrientation = [System.Printing.PageOrientation]::Portrait
     $ticket.CopyCount = 1
+    # .NET's typed PageResolutionCapability only materializes options it can map
+    # onto a known Print Schema keyword. The IPP class driver names its option in
+    # the ns0001 (IPP keywords) namespace, so the typed collection stays empty even
+    # though the driver's own PrintCapabilities document advertises 300x300 under
+    # psk:PageResolution. Read the exposure from the driver's document, and keep
+    # using the validated ticket for what was actually applied.
+    $resolutionXml = @($capabilityDocument.GetElementsByTagName('psf:Option') | Where-Object {
+      $_.ParentNode.GetAttribute('name') -eq 'psk:PageResolution'
+    } | Where-Object {
+      # ResolutionX/Y are ScoredProperty *names*, not element names.
+      $x = @($_.GetElementsByTagName('psf:ScoredProperty') | Where-Object { $_.GetAttribute('name') -eq 'psk:ResolutionX' } | ForEach-Object { $_.InnerText })
+      $y = @($_.GetElementsByTagName('psf:ScoredProperty') | Where-Object { $_.GetAttribute('name') -eq 'psk:ResolutionY' } | ForEach-Object { $_.InnerText })
+      $x.Count -eq 1 -and $y.Count -eq 1 -and $x[0] -eq '300' -and $y[0] -eq '300'
+    })
     $resolution = @($capabilities.PageResolutionCapability | Where-Object { $_.X -eq 300 -and $_.Y -eq 300 })
     if ($resolution.Count -gt 0) { $ticket.PageResolution = $resolution[0] }
     $borderlessAvailable = $capabilities.PageBorderlessCapability -contains [System.Printing.PageBorderless]::Borderless
@@ -57,8 +72,15 @@ try {
     }
     $validation = $queue.MergeAndValidatePrintTicket($base, $ticket)
     $actual = $validation.ValidatedPrintTicket
-    $ticketStream = [IO.File]::Create((Join-Path $ProofDirectory ($spec.key + '-native-validated-ticket.xml')))
+    $ticketPath = Join-Path $ProofDirectory ($spec.key + '-native-validated-ticket.xml')
+    $ticketStream = [IO.File]::Create($ticketPath)
     try { $actual.SaveTo($ticketStream) } finally { $ticketStream.Dispose() }
+    # Parse the saved ticket so checks read what the driver recorded, not only what
+    # the typed properties surface.
+    $ticketDocument = New-Object Xml.XmlDocument
+    $ticketDocument.PreserveWhitespace = $false
+    $ticketDocument.LoadXml([IO.File]::ReadAllText($ticketPath))
+    $validatedXml[$spec.key] = $ticketDocument
     $actualCaps = $queue.GetPrintCapabilities($actual)
     $results += [ordered]@{
       recipe = $spec.key
@@ -67,7 +89,7 @@ try {
       native_borderless_capability = $borderlessAvailable
       requested_quality_exposed = ($capabilities.OutputQualityCapability -contains $spec.quality)
       requested_duplex_exposed = ($capabilities.DuplexingCapability -contains $spec.duplex)
-      requested_resolution_exposed = ($resolution.Count -gt 0)
+      requested_resolution_exposed = ($resolutionXml.Count -gt 0)
       conditional_quality_exposed = ($actualCaps.OutputQualityCapability -contains $spec.quality)
       conditional_duplex_exposed = ($actualCaps.DuplexingCapability -contains $spec.duplex)
       conditional_borderless_exposed = ($actualCaps.PageBorderlessCapability -contains [System.Printing.PageBorderless]::Borderless)
@@ -100,7 +122,14 @@ try {
       ([Math]::Abs($result.actual_width_mm - $expectedWidthMm) -le 0.1) -and ([Math]::Abs($result.actual_height_mm - $expectedHeightMm) -le 0.1)
     $qualityMatch = $result.requested_quality_exposed -and $result.conditional_quality_exposed -and ($result.actual_quality -eq $(if ($result.recipe -eq 'a3-borderless-high') { 'High' } else { 'Normal' }))
     $duplexMatch = $result.requested_duplex_exposed -and $result.conditional_duplex_exposed -and ($result.actual_duplex -eq $(if ($result.recipe -eq 'a4-duplex') { 'TwoSidedLongEdge' } else { 'OneSided' }))
-    $resolutionMatch = $result.requested_resolution_exposed -and ($result.actual_resolution_x -eq 300) -and ($result.actual_resolution_y -eq 300)
+    # The typed ticket property can stay null when the driver's option is named in
+    # the IPP keyword namespace; the validated ticket XML is the authority for what
+    # the driver actually recorded.
+    $ticketResolutionX = @($validatedXml[$result.recipe].GetElementsByTagName('psf:ScoredProperty') | Where-Object { $_.GetAttribute('name') -eq 'psk:ResolutionX' } | ForEach-Object { $_.InnerText })
+    $ticketResolutionY = @($validatedXml[$result.recipe].GetElementsByTagName('psf:ScoredProperty') | Where-Object { $_.GetAttribute('name') -eq 'psk:ResolutionY' } | ForEach-Object { $_.InnerText })
+    $resolutionMatch = $result.requested_resolution_exposed -and
+      (($result.actual_resolution_x -eq 300 -and $result.actual_resolution_y -eq 300) -or
+       ($ticketResolutionX.Count -eq 1 -and $ticketResolutionY.Count -eq 1 -and $ticketResolutionX[0] -eq '300' -and $ticketResolutionY[0] -eq '300'))
     $borderlessMatch = $true
     if ($result.requested_borderless) {
       $area = $result.actual_imageable_area
@@ -126,6 +155,7 @@ try {
     native_duplex_names = @($capabilities.DuplexingCapability | ForEach-Object { $_.ToString() })
     native_borderless_names = @($capabilities.PageBorderlessCapability | ForEach-Object { $_.ToString() })
     native_resolution_names = @($capabilities.PageResolutionCapability | ForEach-Object { $_.ToString() })
+    native_resolution_xml_options = @($resolutionXml | ForEach-Object { $_.GetAttribute('name') })
     native_imageable_size = $(if ($null -ne $capabilities.PageImageableArea) {
       [ordered]@{ origin_x_dip=$capabilities.PageImageableArea.OriginWidth; origin_y_dip=$capabilities.PageImageableArea.OriginHeight; width_dip=$capabilities.PageImageableArea.ExtentWidth; height_dip=$capabilities.PageImageableArea.ExtentHeight }
     } else { $null })
