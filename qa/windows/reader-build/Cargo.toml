@@ -1,0 +1,35 @@
+[package]
+name = "ferriprint-windows-qa"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "AGPL-3.0-only"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "windows-metadata-only-receiver"
+path = "../windows-metadata-only-receiver.rs"
+
+[dependencies]
+ferriprint = { path = "../build/ferriprint" }
+anyhow = "=1.0.104"
+axum = "=0.8.9"
+futures-util = { version = "=0.3.34", features = ["io"] }
+ipp = { version = "=8.0.0", default-features = false, features = ["async"] }
+libc = "=0.2.191"
+rusqlite = { version = "=0.37.0", features = ["bundled"] }
+serde_json = "=1.0.154"
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "signal", "sync", "time"] }
+tokio-util = { version = "=0.7.20", features = ["compat", "io"] }
+uuid = { version = "=1.26.1", features = ["v4", "v5", "serde"] }
+
+[patch.crates-io]
+# Owned QA derivative only; not the original registry package identity.
+libsqlite3-sys = { path = "../build/patched-libsqlite3-sys-0.35.0" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
