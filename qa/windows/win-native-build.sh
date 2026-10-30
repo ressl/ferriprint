@@ -75,7 +75,9 @@ case "$mode" in
       > "$work/receiver.log" 2>&1 < /dev/null &
     ;;
   install-and-start)
-    secret="$1"
+    # The credential arrives on stdin so it never appears in a process argument.
+    IFS= read -r secret
+    test -n "$secret"
     printf '%s\n' "$secret" | "$root/ferriprint" --config "$root/ferriprint.toml" \
       user init --username qa-admin
     "$root/ferriprint" --config "$root/ferriprint.toml" setup install \

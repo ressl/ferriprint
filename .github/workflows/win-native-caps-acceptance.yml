@@ -43,6 +43,14 @@ jobs:
           # The WSL build consumes the same checkout, copied into the distro by the driver.
           New-Item -ItemType Directory -Path (Join-Path $env:QA_WORK 'source') -Force | Out-Null
           Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE '*') -Destination (Join-Path $env:QA_WORK 'source') -Recurse -Force -Exclude '.git'
+          # The build script executes inside Linux; a CRLF checkout makes its
+          # shebang and `set -Eeuo pipefail` fail before any command runs. The
+          # .gitattributes rule is the primary fix; normalise defensively because
+          # the staging copy is what WSL actually reads.
+          $buildScript = Join-Path $env:QA_WORK 'source/qa/windows/win-native-build.sh'
+          $bytes = [IO.File]::ReadAllText($buildScript)
+          [IO.File]::WriteAllText($buildScript, ($bytes -replace "`r`n", "`n"))
+          if ([IO.File]::ReadAllText($buildScript).Contains("`r")) { throw 'Build script still contains a CR after normalisation' }
           [ordered]@{
             commit = $env:QA_SOURCE_SHA
             tested_artifact = 'source build of this checkout inside owned WSL1; not a published release'

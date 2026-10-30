@@ -1,0 +1,4 @@
+# Shell scripts are executed inside WSL/Linux, where a CRLF line ending makes
+# the shebang and `set -Eeuo pipefail` fail before any command runs. Windows
+# checkouts must therefore keep LF here regardless of core.autocrlf.
+*.sh text eol=lf

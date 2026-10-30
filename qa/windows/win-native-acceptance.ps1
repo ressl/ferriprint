@@ -160,7 +160,10 @@ try {
   Invoke-Wsl -Arguments @('-d',$distro,'--exec','bash',($linuxWork+'/win-native-build.sh'),$linuxWork,'start-receiver')
   $receiverReady = $false
   for ($attempt=0; $attempt -lt 20; $attempt++) {
-    try { $null = Invoke-RestMethod 'http://127.0.0.1:18631/audit' -NoProxy -TimeoutSec 2; $receiverReady=$true; break } catch { Start-Sleep -Milliseconds 250 }
+    try {
+      $probe = Invoke-WebRequest 'http://127.0.0.1:18631/printers/receiver.ppd' -NoProxy -TimeoutSec 2
+      if ($probe.StatusCode -eq 200) { $receiverReady=$true; break }
+    } catch { Start-Sleep -Milliseconds 250 }
   }
   if (-not $receiverReady) { throw 'Owned loopback receiver readiness deadline exceeded' }
   $ownership.runtime_start_attempted = $true
@@ -188,11 +191,13 @@ try {
   & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -File (Join-Path $Work 'win-native-capabilities.ps1') -QueueName $queueName -ProofDirectory $proof
   $capabilitiesExit = $LASTEXITCODE
   $receipt.native_capabilities_exit = $capabilitiesExit
-  Invoke-Wsl -Arguments @('-d',$distro,'--exec','cp',"$linuxWork/frontend.log",(Join-Path $Work 'proof/frontend.log'))
+  # WSL cp cannot address a Windows path; the destination is the /mnt form of $Work.
+  Invoke-Wsl -Arguments @('-d',$distro,'--exec','cp',"$linuxWork/frontend.log","$linuxWork/proof/frontend.log")
+  Invoke-Wsl -Arguments @('-d',$distro,'--exec','cp',"$linuxWork/receiver.log","$linuxWork/proof/receiver.log")
   if ($capabilitiesExit -ne 0) { throw 'Native PrintCapabilities/PrintTicket did not preserve the required semantics; exact driver response retained in proof' }
   $receipt.native_local_job_count = @(Get-PrintJob -PrinterName $queueName).Count
   if ($receipt.native_local_job_count -ne 0) { $ownership.violation_observed=$true; Save-OwnedState }
-  $receipt.actual_receiver_audit = Invoke-RestMethod 'http://127.0.0.1:18631/audit' -NoProxy
+  $receipt.actual_receiver_jobs = Invoke-RestMethod 'http://127.0.0.1:18631/received' -NoProxy
   if ($receipt.native_local_job_count -ne 0) { $ownership.violation_observed=$true; Save-OwnedState; throw 'Unexpected native job' }
   $receipt.zero_job_teardown_proven = $true
   $ownership.zero_job_teardown_proven = $true
