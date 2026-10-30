@@ -291,6 +291,29 @@ formats receive the same general set. Get-Jobs tolerates it as a documented
 no-op filter. The previously reported "missing" A3, quality and duplex were the
 driver's fallback after that rejection, not absent frontend capabilities.
 
+The gate was also shown to measure the product rather than itself. Commit
+`9398d43` restored only the pre-fix operation-attribute allowlist, leaving the
+harness and every probe byte-identical, and the real
+[probe run41054014404](https://github.com/ressl/ferriprint/actions/runs/41054014404)
+failed with the original symptom set: `NorthAmericaLetter`/`ISOA4` only, no A3,
+empty quality, duplex and borderless lists, and A4 tickets whose quality and
+duplex stayed null while the bordered imageable area did not match. Its frontend
+log contains no `document-format="application/pdf"` request, because the driver
+was rejected before it asked for capabilities. An ordinary revert (`26595ac`)
+restored the allowlist; neither direction used a force-push and no assertion was
+weakened.
+
+The tested window is a source build of commit `6040a5a`, identified by its own
+recorded `source_commit`/`built_revision` and by a built frontend hash of
+`7c899284df5c5430a5d5f650d786fb87073073501a7258935d035d468674ea12`. The harness
+downloads no release asset, and that hash differs from the published 0.3.0 ELF
+`473767d296f1cc2f86d0f84312da31f4aa031e195437ef7f5d348ad3f5e0bee6`. The source
+build is the right object here because `6040a5a` is the candidate for the next
+publication. The published ELF keeps its own separate, unchanged record: exact
+public version, managed initialization, matching served source `135ea616…` and
+the separate HTTP administrator/ordinary-user role checks, with this capability
+gate never claimed for it.
+
 Two limits belong to this evidence. The resolution exposure check reads the
 driver's own `psf:ScoredProperty` names rather than .NET's typed
 `PageResolutionCapability`, which does not materialize the IPP keyword

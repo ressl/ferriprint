@@ -34,7 +34,7 @@ IPP login, an emitted job ticket and measured paper are separate evidence layers
 | --- | --- | --- |
 | Physical macOS27.0.1 arm64, fresh Default/Add/automatic Use | The real native panel displayed all three site recipes. Manual A3 zero-margin/Best-quality and duplex controls were observed; selecting the A3 named recipe changed quality/sides | Its observed Paper Size remainedA4 and Paper Handling destination was disabled. No complete A3 GUI ticket or output was produced; no Apple/server/driver root cause or universal preset behavior is inferred |
 | Independent hosted native macOS15.7.9 arm64 | [Run40713530309](https://github.com/ressl/ferriprint/actions/runs/40713530309): actual local CUPS generated A3 29700x42000 with all margins0, High5 and both duplex options; a fresh ordinary user separately passed system-libcups GPA and three strict Validate requests | Actual `VirtualMac2,1` / `Apple M1 (Virtual)`, not another physical Mac. Source-built Mach-O from unchanged503, not the Linux release ELF or a macOS server package; no native Print-auth or output proof |
-| Hosted Windows Server2025 x64 | [Run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435): this source tree built in owned WSL1 on literal loopback; native Add automatically selected Microsoft IPP Class Driver; native capabilities and validated tickets preserved A3 297x420 mm borderless, High quality, zero imageable origin, A4 210x297 mm with 3000 DIP margins and A4 `TwoSidedLongEdge` | Native Print Schema/ticket metadata on a disposable hosted VM only. Earlier [run40769440761](https://github.com/ressl/ferriprint/actions/runs/40769440761) reported the opposite for the same gate but against the published ELF; its host-provided capability XML described the driver's fallback after the frontend rejected the conforming `document-format`. No measured paper, edge coverage, physical output, native IPP authentication or Windows-incompatibility verdict |
+| Hosted Windows Server2025 x64 | [Run41051572435](https://github.com/ressl/ferriprint/actions/runs/41051572435) on a source build of `6040a5a` in owned WSL1 on literal loopback: native Add automatically selected Microsoft IPP Class Driver, and native capabilities plus validated tickets preserved A3 297x420 mm borderless at High with zero imageable origin, A4 210x297 mm with 3000 DIP margins, and A4 `TwoSidedLongEdge`, all `NoConflict`. [Run41054014404](https://github.com/ressl/ferriprint/actions/runs/41054014404) restored only the pre-fix allowlist and failed with A3 absent and empty quality/duplex/borderless, so the gate discriminates | Native Print Schema/ticket metadata on a disposable hosted VM: windows-2025 only, no measured paper, edge coverage, physical quality, native IPP authentication or TLS, and no Gallifrey CUPS queue was contacted. The published 0.3.0 ELF (`473767d2…`) was not relabelled: it passed runtime/HTTP roles, never this capability gate |
 
 The preceding [Windows run40746710278](https://github.com/ressl/ferriprint/actions/runs/40746710278),
 [classifier run40755062052](https://github.com/ressl/ferriprint/actions/runs/40755062052)
@@ -78,6 +78,33 @@ conforming `document-format` was answered
 8011 §4.2.5.1 requires the Printer to support that attribute. The fix accepts
 it and keeps one capability set for every format, as §4.2.5.1 requires of a
 Printer that does not distinguish per-format sets, and it invents no value.
+
+The gate was then shown to measure the product rather than itself. Commit
+`9398d43` restored only the pre-fix allowlist — same harness, same probes, every
+other assertion byte-identical — and the real
+[probe run41054014404](https://github.com/ressl/ferriprint/actions/runs/41054014404)
+failed exactly as originally reported: capabilities
+`NorthAmericaLetter`/`ISOA4` only, empty quality, empty duplex, empty
+borderless, A3 absent, and A4 tickets with null quality/duplex and a bordered
+imageable area that did not match. Its frontend log has no
+`document-format="application/pdf"` request at all, because the driver was
+rejected before it asked for capabilities. The allowlist was then restored by an
+ordinary revert (`26595ac`); no force-push and no test change accompanied either
+direction.
+
+The window under test is a source build of commit `6040a5a`, not the published
+release. The harness contains no release download, and its built frontend hashes
+to `7c899284df5c5430a5d5f650d786fb87073073501a7258935d035d468674ea12`, distinct
+from the published 0.3.0 ELF
+`473767d296f1cc2f86d0f84312da31f4aa031e195437ef7f5d348ad3f5e0bee6`. That is
+appropriate because `6040a5a` is the candidate for the next publication, and the
+question was whether this source fixes the rejection. What the published 0.3.0
+ELF actually passed remains separate and unchanged: in the earlier native run it
+started as the exact public version, completed managed initialization, served
+its matching source archive `135ea616…` and passed the separate HTTP
+administrator/ordinary-user role checks (`200`/`403`); it never passed this
+capability gate, and it was never claimed to. No result here relabels that
+published artifact.
 
 The earlier host-provided capability XML that lacked A3, quality and duplex
 described the driver's fallback, not the capabilities this frontend serves.

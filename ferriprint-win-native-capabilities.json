@@ -436,5 +436,64 @@
       "result": "success",
       "cause": "reproduction after docs"
     }
-  ]
+  ],
+  "discrimination_probe": {
+    "purpose": "prove the native gate measures the product, not itself: a test fix that only turns a test green is suspect",
+    "probe_commit": "9398d43e50b2c57a2b9989f12974d048ab174cc5",
+    "probe_content": "only the pre-fix operation-attribute allowlist restored; harness, probes and every assertion byte-identical to the passing run",
+    "probe_run": {
+      "run_id": 41054014404,
+      "url": "https://github.com/ressl/ferriprint/actions/runs/41054014404",
+      "attempt": 1,
+      "result": "failure"
+    },
+    "probe_observed": {
+      "required_native_settings_pass": false,
+      "driver_offered": {
+        "media": [
+          "NorthAmericaLetter",
+          "ISOA4"
+        ],
+        "quality": [],
+        "duplex": [],
+        "borderless": [],
+        "resolution_from_driver_document": [
+          "ns0002:Res300"
+        ]
+      },
+      "a3_borderless_high": "native_media_available=false, matching_media_count=0 - A3 absent",
+      "a4_normal": "actual_quality=null, actual_duplex=null, actual_borderless=null, bordered imageable area did not match",
+      "a4_duplex": "actual_quality=null, actual_duplex=null, actual_borderless=null, bordered imageable area did not match",
+      "frontend_log": "no document-format=\"application/pdf\" request at all; the driver was rejected before it asked for capabilities",
+      "symptom_match": "reproduces the originally reported failure state exactly (A3 missing, empty quality/duplex, A4 tickets not preserving quality/duplex/imageable area)"
+    },
+    "reverted_by": "26595ac (ordinary git revert, no force-push); diff against a83c5ae is empty for src/ and tests/"
+  },
+  "artifact_identity": {
+    "tested_object": "source build of commit 6040a5a2fcdb89145703ca15807a9897f1832015 inside owned WSL1",
+    "built_frontend_sha256": "7c899284df5c5430a5d5f650d786fb87073073501a7258935d035d468674ea12",
+    "built_receiver_sha256": "3eaefb0e10f1c2cf017ee2c427987370184d06b63b7338f1839a9a99ca3a67a5",
+    "built_cargo_lock_sha256": "1cd046e66e9e340e5b5295b8cdd719dcd98f5ef20bdd7d58c6edb00de2ab445e",
+    "published_030_frontend_elf_sha256": "473767d296f1cc2f86d0f84312da31f4aa031e195437ef7f5d348ad3f5e0bee6",
+    "hashes_differ": true,
+    "harness_downloads_release_asset": false,
+    "why_source_build_is_the_right_object": "6040a5a is the candidate for the next publication; the question was whether this source removes the rejection",
+    "what_published_030_actually_passed": {
+      "run_id": 40769440761,
+      "exact_public_version": "ferriprint 0.3.0",
+      "managed_initialization": "passed",
+      "served_matching_source_sha256": "135ea616c34a10ed823461712f43d926a6e6dce12fdded96c59bf8830b2c4b1b",
+      "separate_http_roles": "GET /api/printers 200, GET /admin/users 403",
+      "capability_gate": "never claimed for the published ELF"
+    },
+    "not_relabelled": "no result here relabels the published 0.3.0 artifact"
+  },
+  "fidelity_fix": {
+    "present_on_branch": true,
+    "commit": "cd73bba5e1335be27a405b65d69418ea51f62e44",
+    "scope": "RFC 8011 Appendix C.1 ipp-attribute-fidelity=false: unknown/substitutable Job attributes ignored and reported; media/media-col/copies/job-preset-name stay hard rejections",
+    "is_windows_cause": false,
+    "why_not": "the Windows gate sends no Job ticket at all (only Get-Printer-Attributes 0x000B), so job-priority/finishings never reach the frontend",
+    "retained_because": "it is a real RFC deviation for clients that do submit best-effort Jobs"
+  }
 }
