@@ -944,3 +944,139 @@ async fn best_effort_print_job_is_created_and_submitted_with_substituted_values(
     let job = front.app.engine.get_job(id).await.unwrap().unwrap();
     assert_eq!(job.resolved.copies, 2);
 }
+
+/// RFC 8011 §4.2.5.1: "document-format" is a Client-supplied operation
+/// attribute that the Printer MUST support on Get-Printer-Attributes. Windows
+/// IPP class-driver clients send it while discovering a queue; rejecting it
+/// returned client-error-document-format-not-supported with zero Printer
+/// Attributes, so a capability set was never negotiated.
+///
+/// An unrecognised format is answered with the general capability set rather
+/// than rejected: this frontend has one set, so the truthful answer is that the
+/// same capabilities apply. No per-format value is invented.
+#[tokio::test]
+async fn get_printer_attributes_answers_unknown_document_format_with_general_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+    let baseline = front
+        .send(front.request(Operation::GetPrinterAttributes, None), &[])
+        .await;
+    success(&baseline);
+    let mut request = front.request(Operation::GetPrinterAttributes, None);
+    add(
+        &mut request,
+        OP,
+        "document-format",
+        IppValue::MimeMediaType("application/vnd.example.unknown".try_into().unwrap()),
+    )
+    .unwrap();
+    let response = front.send(request, &[]).await;
+    success(&response);
+    let g = DelimiterTag::PrinterAttributes;
+    assert_eq!(
+        attr(&response, g, "media-col-database"),
+        attr(&baseline, g, "media-col-database")
+    );
+    assert_eq!(
+        attr(&response, g, "document-format-supported"),
+        attr(&baseline, g, "document-format-supported"),
+        "the advertised format list must not be rewritten by a client-supplied value"
+    );
+}
+
+/// The syntax is still validated: a non-mime "document-format" is rejected.
+/// The status is this codebase's existing document-format mapping
+/// (`Rejection::unsupported`), unchanged by this fix.
+#[tokio::test]
+async fn get_printer_attributes_rejects_malformed_document_format() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+    let mut request = front.request(Operation::GetPrinterAttributes, None);
+    add(
+        &mut request,
+        OP,
+        "document-format",
+        keyword("application/pdf").unwrap(),
+    )
+    .unwrap();
+    let response = front.send(request, &[]).await;
+    assert_eq!(
+        response.header().status_code(),
+        StatusCode::ClientErrorDocumentFormatNotSupported
+    );
+    assert!(
+        attr(
+            &response,
+            DelimiterTag::UnsupportedAttributes,
+            "document-format"
+        )
+        .is_some()
+    );
+}
+
+/// Get-Jobs tolerates "document-format": it selects Jobs by state and owner, so
+/// the value is a documented no-op filter rather than a rejection.
+#[tokio::test]
+async fn get_jobs_accepts_document_format() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+    let baseline = front
+        .send(front.request(Operation::GetJobs, None), &[])
+        .await;
+    success(&baseline);
+    let mut request = front.request(Operation::GetJobs, None);
+    add(
+        &mut request,
+        OP,
+        "document-format",
+        IppValue::MimeMediaType("application/pdf".try_into().unwrap()),
+    )
+    .unwrap();
+    let response = front.send(request, &[]).await;
+    success(&response);
+}
+
+#[tokio::test]
+async fn get_printer_attributes_accepts_document_format_and_keeps_the_capability_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let receiver = Receiver::start().await;
+    let front = Frontend::start(config(dir.path(), &receiver.uri(), 0)).await;
+    let baseline = front
+        .send(front.request(Operation::GetPrinterAttributes, None), &[])
+        .await;
+    success(&baseline);
+    let g = DelimiterTag::PrinterAttributes;
+    for format in ["application/pdf", "image/pwg-raster", "image/urf"] {
+        let mut request = front.request(Operation::GetPrinterAttributes, None);
+        add(
+            &mut request,
+            OP,
+            "document-format",
+            IppValue::MimeMediaType(format.try_into().unwrap()),
+        )
+        .unwrap();
+        let response = front.send(request, &[]).await;
+        // This profile has no per-format capability sets, so RFC 8011 requires the
+        // same answer for every format rather than narrowing or rejecting.
+        success(&response);
+        for name in [
+            "media-col-database",
+            "media-size-supported",
+            "print-quality-supported",
+            "sides-supported",
+            "print-color-mode-supported",
+            "printer-resolution-supported",
+            "job-presets-supported",
+            "document-format-supported",
+        ] {
+            assert_eq!(
+                attr(&response, g, name),
+                attr(&baseline, g, name),
+                "{name} must stay format-invariant for {format}"
+            );
+        }
+    }
+}

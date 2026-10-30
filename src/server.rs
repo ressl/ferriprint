@@ -633,6 +633,20 @@ async fn handle<R: AsyncRead + Unpin + Send>(
         )?;
         crate::telemetry::add_ipp(&printer.telemetry.snapshot(), &mut reply)?;
         protocol::filter_requested(request, &mut reply);
+        // Record what the client actually asked for. Native drivers such as the
+        // Microsoft IPP Class Driver negotiate their PrintCapabilities from this
+        // answer; without the request shape a reduced or empty capability set
+        // cannot be attributed to the client rather than to this frontend.
+        tracing::info!(
+            printer = printer_name,
+            document_format = attr(request, g, "document-format").and_then(str_value),
+            requested = ?string_list(attr(request, g, "requested-attributes")),
+            advertised = reply
+                .attributes()
+                .first_of(DelimiterTag::PrinterAttributes)
+                .map_or(0, |group| group.attributes().len()),
+            "IPP Get-Printer-Attributes served"
+        );
         return Ok(reply);
     }
     let principal = principal.context("non-capability IPP operation requires a principal")?;
