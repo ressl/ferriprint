@@ -1774,7 +1774,7 @@ fn kernel_result(call: KernelCall, returned: i64, text: &str) -> Result<KernelRe
         // The same device-class tag strace appends to argument annotations also
         // appears on returned descriptors, e.g. "= 6</dev/null<char 1:3>>". Strip
         // exactly that documented suffix here too; the tag is not a socket target.
-        kernel_annotation(strip_device_tag(annotation).unwrap_or(annotation))?;
+        kernel_annotation(annotation)?;
         let fd_result = matches!(call, KernelCall::Socket | KernelCall::Accept | KernelCall::Accept4 |
             KernelCall::Dup | KernelCall::Dup2 | KernelCall::Dup3 | KernelCall::Fcntl |
             KernelCall::Open | KernelCall::Openat | KernelCall::Openat2 | KernelCall::Creat |
@@ -1802,6 +1802,10 @@ struct KernelAnnotation {
     backend_peer: bool,
 }
 fn kernel_annotation(text: &str) -> Result<KernelAnnotation> {
+    // One place strips the documented device-class tag that strace -yy appends to
+    // every fd annotation, on arguments and on returned descriptors alike. Any
+    // other nesting is still rejected below.
+    let text = strip_device_tag(text).unwrap_or(text);
     if text.is_empty() { return Err("KERNEL_ANN_EMPTY"); }
     if text.len() > KERNEL_FD_TEXT_LIMIT { return Err("KERNEL_ANN_TOO_LONG"); }
     if text.contains('<') { return Err("KERNEL_ANN_NESTED"); }
