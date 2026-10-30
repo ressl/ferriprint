@@ -38,11 +38,11 @@ jobs:
           New-Item -ItemType Directory -Path $proof | Out-Null
           $inputs = [ordered]@{
             'windows-wsl-acceptance.ps1' = '27385d44462ac49dc7f480c44da17c806cac06f6375730764dbdc7df81231c28'
-            'windows-wsl-bootstrap.sh' = 'a4949f366210a368af8dd8ff18dd215e00f827da9d5c244f75ecf7a66183f550'
+            'windows-wsl-bootstrap.sh' = '1a9cdcbf8cad5e2ad1b8b13227ec928dbeb9186affa9f6c0f68926714ca446f9'
             'windows-native-capabilities.ps1' = 'fedebbaaac279daaeb471af9461da13d730e46fe09ac54f90c8e7f2c74f6595b'
             'windows-wsl-cleanup.ps1' = '47769b3956d248b2aef201bbc926cec302323c5e08b2bfe097f032d160a7b051'
             'windows-wsl-metadata.ps1' = '7bba0747899ffdd49465ea8a2872a3f138b8a3109a407465f977f9e67e6e0f87'
-            'windows-metadata-only-receiver.rs' = '25f6311692de3a1de7dc072ad90ed58f166441964d0891e7a1238cdbde874fbb'
+            'windows-metadata-only-receiver.rs' = '6fec7097bdc40691fcf02d459759da9955b9de9d8420f62a5fc32ca1ed44bb3a'
             'windows-public-choices.toml' = '6306e3814a2e9dc6ba7f51325e76fa8d6d11da77f5089ba8dfca4bec8399856e'
             'reader-build/Cargo.toml' = '862e18a17153381c26e1d8773c7b947487d948efdd4c5b629231be4fd050893c'
             'reader-build/Cargo.lock' = 'f2c921156198575070a9bf48776cc4e3d7058cd3e6bd3de800589a73fa74c44a'

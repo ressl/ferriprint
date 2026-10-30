@@ -56,7 +56,7 @@ case "$mode" in
     tar -xzf "$work/build/source.tar.gz" -C "$work/build"
     verify a121364e8159cbb1ad2e5782f76ebe9f9981776abac42c986c5556cec0928240 "$work/build/ferriprint/tests/fixtures/native.ppd"
     verify 2a9b628feaaf696f1a147c9bc6c93dd55f19a793e2fb8754c919352ddae02c4d "$work/build/ferriprint/examples/profile.toml"
-    verify 25f6311692de3a1de7dc072ad90ed58f166441964d0891e7a1238cdbde874fbb "$work/windows-metadata-only-receiver.rs"
+    verify 6fec7097bdc40691fcf02d459759da9955b9de9d8420f62a5fc32ca1ed44bb3a "$work/windows-metadata-only-receiver.rs"
     verify 6306e3814a2e9dc6ba7f51325e76fa8d6d11da77f5089ba8dfca4bec8399856e "$work/windows-public-choices.toml"
     # Fingerprint every original archive file before the separate derivative QA build.
     source_core_manifest="$work/proof/published-source-core.sha256"

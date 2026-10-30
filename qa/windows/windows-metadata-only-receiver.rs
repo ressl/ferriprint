@@ -1312,14 +1312,16 @@ fn kernel_dirfd(text: &str) -> Result<KernelParsedFd<'_>> {
     kernel_fd(text)
 }
 fn kernel_angle(text: &str) -> Result<&str> {
-    let inner = text.strip_prefix('<').and_then(|text| text.strip_suffix('>')).ok_or("KERNEL_FD_ANNOTATION")?;
+    let inner = text.strip_prefix('<').and_then(|text| text.strip_suffix('>')).ok_or("KERNEL_ANGLE_WRAP")?;
     // strace -yy appends a device-class tag inside the annotation for character and
     // block devices, e.g. "/dev/null<char 1:3>". Strip exactly that documented
     // suffix so the remaining annotation is the plain target; any other nesting is
     // still rejected below.
     let inner = strip_device_tag(inner).unwrap_or(inner);
-    if inner.is_empty() || inner.contains('<') || inner.bytes().enumerate().any(|(at, byte)|
-        byte == b'>' && (at == 0 || inner.as_bytes()[at - 1] != b'-')) { return Err("KERNEL_FD_ANNOTATION"); }
+    if inner.is_empty() { return Err("KERNEL_ANGLE_EMPTY"); }
+    if inner.contains('<') { return Err("KERNEL_ANGLE_NESTED"); }
+    if inner.bytes().enumerate().any(|(at, byte)|
+        byte == b'>' && (at == 0 || inner.as_bytes()[at - 1] != b'-')) { return Err("KERNEL_ANGLE_LT_GT"); }
     Ok(inner)
 }
 fn strip_device_tag(inner: &str) -> Option<&str> {
@@ -1768,7 +1770,7 @@ fn kernel_result(call: KernelCall, returned: i64, text: &str) -> Result<KernelRe
     }
     if returned < 0 { return Err("KERNEL_SYSCALL_RESULT"); }
     if let Some(annotation) = rest.strip_prefix('<') {
-        let annotation = annotation.strip_suffix('>').ok_or("KERNEL_FD_ANNOTATION")?;
+        let annotation = annotation.strip_suffix('>').ok_or("KERNEL_RESULT_ANN_WRAP")?;
         // The same device-class tag strace appends to argument annotations also
         // appears on returned descriptors, e.g. "= 6</dev/null<char 1:3>>". Strip
         // exactly that documented suffix here too; the tag is not a socket target.
@@ -1800,8 +1802,10 @@ struct KernelAnnotation {
     backend_peer: bool,
 }
 fn kernel_annotation(text: &str) -> Result<KernelAnnotation> {
-    if text.is_empty() || text.len() > KERNEL_FD_TEXT_LIMIT || text.contains('<') ||
-        text.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) { return Err("KERNEL_FD_ANNOTATION"); }
+    if text.is_empty() { return Err("KERNEL_ANN_EMPTY"); }
+    if text.len() > KERNEL_FD_TEXT_LIMIT { return Err("KERNEL_ANN_TOO_LONG"); }
+    if text.contains('<') { return Err("KERNEL_ANN_NESTED"); }
+    if text.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) { return Err("KERNEL_ANN_CONTROL"); }
     let mut parsed = KernelAnnotation { socket: false, protocol: 0, complete: false, connected: false,
         listener_local: false, backend_peer: false };
     let Some((prefix, body)) = text.split_once(": [").or_else(|| text.split_once(":[")) else { return Ok(parsed); };
