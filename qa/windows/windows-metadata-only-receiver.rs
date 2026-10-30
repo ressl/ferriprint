@@ -2657,8 +2657,12 @@ fn prepare_gated_frontend(work:&Path,observer:ProcessSession,old_pid:u32,deadlin
                     _ => "UNKNOWN_SYSCALL" }).unwrap_or("NO_CALL");
             // Fixed-shape facts about the first angle annotation on the line. Only
             // enumerations leave the process: no path, inode, address or payload.
-            let ann = text.find('<').map(|at| {
-                let rest=&text[at..];
+            // Classify the annotation that follows the result sign, which is the one
+            // the result path checks, falling back to the first angle on the line.
+            let after_result = text.rfind(") = ").map(|at| &text[at+4..]).or_else(|| text.rfind(") =").map(|at| &text[at+3..]));
+            let ann = after_result.filter(|v| v.trim_start().starts_with('<'))
+                .and_then(|v| v.find('<').map(|i| &v[i..]))
+                .or_else(|| text.find('<').map(|at| &text[at..])).map(|rest| {
                 let closed=rest.find('>').is_some();
                 let inner=rest.strip_prefix('<').and_then(|v|v.split_once('>').map(|x|x.0)).unwrap_or("");
                 let nested=inner.contains('<');
